@@ -10,6 +10,22 @@
         "8000"
       ],
       "port": 8000
+    },
+    {
+      "name": "django-telefon",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "manage.py",
+        "runserver",
+        "8002",
+        "--insecure"
+      ],
+      "port": 8002,
+      "env": {
+        "DJANGO_DEBUG": "0",
+        "DJANGO_ALLOWED_HOSTS": ".lhr.life",
+        "DJANGO_CSRF_TRUSTED_ORIGINS": "https://*.lhr.life"
+      }
     }
   ]
 }
