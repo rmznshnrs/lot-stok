@@ -1,0 +1,69 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Satış{% endblock %}
+{% block sayfa_basligi %}Satış kaydı{% endblock %}
+{% block icerik %}
+<form method="post" id="m-satis-formu" class="m-form" data-kontrol-url="{% url 'takip:m_seri_kontrol' %}" novalidate>
+  {% csrf_token %}
+  <div class="alan">
+    <label for="{{ form.musteri.id_for_label }}">{{ form.musteri.label }}</label>
+    {{ form.musteri }}
+    {% if form_hatalari_goster %}{% for e in form.musteri.errors %}<span class="hata">{{ e }}</span>{% endfor %}{% endif %}
+  </div>
+  <datalist id="musteri-listesi">
+    {% for m in musteriler %}<option value="{{ m.ad }}">{% endfor %}
+  </datalist>
+  <div class="alan">
+    <label for="{{ form.tarih.id_for_label }}">{{ form.tarih.label }}</label>
+    {{ form.tarih }}
+    {% if form_hatalari_goster %}{% for e in form.tarih.errors %}<span class="hata">{{ e }}</span>{% endfor %}{% endif %}
+  </div>
+
+  <div class="bas-satir">
+    <h2 class="m-bolum-baslik">Satılan ürünler</h2>
+    <button type="button" id="m-seri-tara" class="btn btn--ikincil m-btn-orta" hidden>+ Seri no tara</button>
+  </div>
+
+  <div class="m-satir">
+    <input type="text" name="yeni_seri" class="girdi girdi--mono" placeholder="Seri no elle girin" aria-label="Seri no" autocomplete="off" autocapitalize="characters" enterkeyhint="done">
+    <button type="submit" name="islem" value="ekle" class="btn btn--ikincil m-btn-orta">Ekle</button>
+  </div>
+  {% for e in seri_hatalari %}<span class="hata">{{ e }}</span>{% endfor %}
+  <div id="m-satis-bildirim" class="m-bildirim" role="status" aria-live="polite" hidden></div>
+
+  <div class="m-sepet" id="m-sepet">
+    {% for k in sepet %}
+    <div class="m-sepet-oge{% if k.geri_lotlar %} m-sepet-oge--uyari{% endif %}">
+      <input type="hidden" name="seri" value="{{ k.uretim.seri_no }}">
+      <div class="baslik-grup">
+        <span data-urun>{{ k.uretim.urun.ad }}</span>
+        <span class="mono yardim" data-seri>{{ k.uretim.seri_no }}</span>
+        <span class="yardim uyari-metin" data-uyari{% if not k.geri_lotlar %} hidden{% endif %}>{% if k.geri_lotlar %}Geri çağrılan lot içeriyor ({{ k.geri_lotlar|join:", " }}) — satışa uygun değil{% endif %}</span>
+      </div>
+      <span class="m-adet">1 adet</span>
+      <button type="submit" name="islem" value="kaldir:{{ k.uretim.seri_no }}" class="btn-kaldir" aria-label="{{ k.uretim.seri_no }} listeden kaldır">×</button>
+    </div>
+    {% endfor %}
+  </div>
+  <p id="m-sepet-bos" class="not m-sepet-bos"{% if sepet %} hidden{% endif %}>Henüz ürün eklenmedi. Seri numarasını okutun veya elle girin.</p>
+  <template id="m-sepet-sablon">
+    <div class="m-sepet-oge">
+      <input type="hidden" name="seri" value="">
+      <div class="baslik-grup">
+        <span data-urun></span>
+        <span class="mono yardim" data-seri></span>
+        <span class="yardim uyari-metin" data-uyari hidden></span>
+      </div>
+      <span class="m-adet">1 adet</span>
+      <button type="submit" name="islem" value="" class="btn-kaldir">×</button>
+    </div>
+  </template>
+
+  <label id="m-onay" class="onay-etiket onay-etiket--uyari"{% if not uyari_var %} hidden{% endif %}>
+    <input type="checkbox" name="onay" value="1"{% if onay %} checked{% endif %}> Geri çağrılan lot içeren ürünleri yine de sat
+  </label>
+
+  <div class="toplam-satir"><span>Toplam</span><strong id="m-sepet-sayi">{{ sepet|length }} ürün</strong></div>
+  <p class="not">Her seri numarası, üretimde kullanılan parça lotlarına bağlıdır. Geri çağırmada bu müşteri otomatik listelenir.</p>
+  <button type="submit" name="islem" value="kaydet" class="btn m-btn-buyuk">Satışı kaydet</button>
+</form>
+{% endblock %}

@@ -30,6 +30,12 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+# Telefonda deneme için tünel / ağ adresleri, virgülle: DJANGO_ALLOWED_HOSTS=".lhr.life"
+ALLOWED_HOSTS += [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+# HTTPS tünelinden gelen form gönderimleri için: DJANGO_CSRF_TRUSTED_ORIGINS="https://*.lhr.life"
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()
+]
 
 
 # Application definition

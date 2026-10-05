@@ -1,0 +1,131 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}{% if q %}{{ q }}{% else %}Sorgula{% endif %}{% endblock %}
+{% block sayfa_basligi %}Lot / seri sorgula{% endblock %}
+{% block icerik %}
+<div class="m-kamera{% if q %} m-kamera--kucuk{% endif %}" data-sorgu-kamera>
+  <video playsinline muted></video>
+  <div class="m-kamera-cerceve" aria-hidden="true"></div>
+  <div class="m-kamera-metin" data-durum>Barkodu / etiketi kameraya tutun</div>
+  <button type="button" class="m-kamera-ac" data-kamera-ac>Kamerayı aç</button>
+  <button type="button" class="m-kamera-kapat" data-kamera-kapat aria-label="Kamerayı kapat">×</button>
+</div>
+
+<form method="get" id="sorgu-formu" class="alan" role="search">
+  <label for="m-q">veya elle girin</label>
+  <div class="m-satir">
+    <input type="search" id="m-q" name="q" value="{{ q }}" class="girdi girdi--mono" placeholder="Lot veya seri no" autocomplete="off" autocapitalize="characters" enterkeyhint="search">
+    <button type="submit" class="btn m-btn-orta">Sorgula</button>
+  </div>
+</form>
+
+{% if sonuc %}
+  {% if sonuc.tur == 'lot' %}
+  {% with iz=sonuc.iz lot=sonuc.iz.lot %}
+  <section class="m-kart{% if lot.geri_cagrildi %} m-kart--geri{% endif %}">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ lot.lot_no }}</span>
+      {% if lot.geri_cagrildi %}<span class="rozet rozet--uyari">Geri çağrıldı</span>{% else %}<span class="rozet rozet--mavi">Lot</span>{% endif %}
+    </div>
+    <div class="m-kart-baslik">{{ lot.parca.ad }} <span class="mono yardim">{{ lot.parca.kod }}</span></div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Tedarikçi</span><span>{{ lot.tedarikci.ad }}</span></div>
+      <div class="bilgi"><span>Kalan stok</span><span>{{ lot.kalan_adet }} / {{ lot.giris_adet }}</span></div>
+      <div class="bilgi"><span>Kullanıldığı ürün</span><span>{{ iz.uretimler|length }} seri no</span></div>
+      <div class="bilgi"><span>Satılan müşteri</span><span{% if iz.musteriler %} class="uyari-metin"{% endif %}>{{ iz.musteriler|length }} müşteri</span></div>
+    </div>
+
+    {% if iz.musteriler %}
+    <div class="m-alt-baslik">Müşteriler</div>
+    {% for m in iz.musteriler %}
+    <div class="m-liste-oge">
+      <span class="kalin">{{ m.ad }}</span>
+      <span class="yardim">{% for s in m.satislar %}<a href="?q={{ s.seri_no|urlencode }}" class="mono">{{ s.seri_no }}</a> · {{ s.tarih|date:"d.m.Y" }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      {% if m.iletisim %}<span class="yardim">{{ m.iletisim }}</span>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if iz.stoktaki_uretimler %}
+    <div class="m-alt-baslik">Depodaki ürünler ({{ iz.stoktaki_uretimler|length }})</div>
+    <div class="seri-listesi">
+      {% for u in iz.stoktaki_uretimler %}<a href="?q={{ u.seri_no|urlencode }}" class="seri-cip{% if lot.geri_cagrildi %} seri-cip--uyari{% else %} seri-cip--mavi{% endif %}">{{ u.seri_no }}</a>{% endfor %}
+    </div>
+    {% if lot.geri_cagrildi %}<div class="uyari-kutu">Depodaki ürünler sevkiyattan önce ayrılmalı.</div>{% endif %}
+    {% endif %}
+
+    {% if not iz.uretimler %}<p class="not">Bu lot henüz hiçbir üretimde kullanılmadı.</p>{% endif %}
+    <a href="{% url 'takip:izlenebilirlik' %}?lot={{ lot.lot_no|urlencode }}" class="btn btn--ikincil m-btn-tam">Detaylı izi gör</a>
+  </section>
+  {% endwith %}
+
+  {% elif sonuc.tur == 'seri' %}
+  {% with iz=sonuc.iz %}
+  <section class="m-kart{% if iz.geri_cagrilan_lotlar %} m-kart--geri{% endif %}">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ iz.uretim.seri_no }}</span>
+      {% if iz.satis %}<span class="rozet rozet--uyari">Satıldı</span>{% else %}<span class="rozet rozet--basari">Depoda</span>{% endif %}
+    </div>
+    <div class="m-kart-baslik">{{ iz.urun.ad }}</div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Üretim</span><span>{{ iz.uretim.tarih|date:"d.m.Y" }}</span></div>
+      <div class="bilgi"><span>Müşteri</span>{% if iz.satis %}<span>{{ iz.musteri.ad }} · {{ iz.satis.tarih|date:"d.m.Y" }}</span>{% else %}<span class="soluk">Henüz satılmadı</span>{% endif %}</div>
+    </div>
+    {% if iz.geri_cagrilan_lotlar %}
+    <div class="uyari-kutu">Bu üründe geri çağrılan {{ iz.geri_cagrilan_lotlar|length }} lot var.</div>
+    {% endif %}
+
+    <div class="m-alt-baslik">İçindeki parçalar ve lotları</div>
+    {% for p in iz.parcalar %}
+    <a href="?q={{ p.lot.lot_no|urlencode }}" class="m-liste-oge m-liste-oge--satir{% if p.geri_cagrildi %} m-liste-oge--uyari{% endif %}">
+      <span class="baslik-grup">
+        <span>{{ p.parca.ad }}</span>
+        <span class="mono yardim{% if p.geri_cagrildi %} uyari-metin{% endif %}">{{ p.lot.lot_no }}{% if p.geri_cagrildi %} · geri çağrıldı{% endif %}</span>
+      </span>
+      <span class="m-adet">{{ p.adet }} adet</span>
+    </a>
+    {% endfor %}
+    <a href="{% url 'takip:izlenebilirlik' %}?sekme=seri&amp;seri={{ iz.uretim.seri_no|urlencode }}" class="btn btn--ikincil m-btn-tam">Detaylı izi gör</a>
+  </section>
+  {% endwith %}
+
+  {% elif sonuc.tur == 'parca' %}
+  {% with p=sonuc.grup.parca %}
+  <section class="m-kart">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ p.kod }}</span>
+      <span class="rozet rozet--mavi">Parça</span>
+    </div>
+    <div class="m-kart-baslik">{{ p.ad }}</div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Kullanılabilir</span><span{% if p.min_altinda %} class="uyari-metin"{% endif %}>{{ p.kullanilabilir_stok }} {{ p.birim }}{% if p.min_altinda %} · min altında{% endif %}</span></div>
+      <div class="bilgi"><span>Toplam</span><span>{{ p.toplam_stok }} {{ p.birim }}</span></div>
+    </div>
+    {% if sonuc.grup.lotlar %}
+    <div class="m-alt-baslik">Stoktaki lotlar</div>
+    {% for lot in sonuc.grup.lotlar %}
+    <a href="?q={{ lot.lot_no|urlencode }}" class="m-liste-oge m-liste-oge--satir{% if lot.geri_cagrildi %} m-liste-oge--uyari{% endif %}">
+      <span class="baslik-grup">
+        <span class="mono">{{ lot.lot_no }}{% if lot.sirada %} <span class="lot-etiket">· sıradaki</span>{% endif %}{% if lot.geri_cagrildi %} <span class="lot-etiket lot-etiket--uyari">· geri çağrıldı</span>{% endif %}</span>
+        <span class="yardim">{{ lot.tedarikci.ad }} · {{ lot.siparis_tarihi|date:"d.m.Y" }}</span>
+      </span>
+      <span class="m-adet">{{ lot.kalan_adet }}</span>
+    </a>
+    {% endfor %}
+    {% else %}
+    <p class="not">Stokta lot yok.</p>
+    {% endif %}
+  </section>
+  {% endwith %}
+
+  {% elif sonuc.adaylar %}
+  <section class="m-kart">
+    <div class="not">“{{ q }}” birebir eşleşmedi. Şunlardan birini mi arıyordunuz?</div>
+    <div class="seri-listesi">
+      {% for tur, deger in sonuc.adaylar %}<a href="?q={{ deger|urlencode }}" class="seri-cip seri-cip--mavi"><span class="cip-tur">{% if tur == 'lot' %}lot{% else %}seri{% endif %}</span> {{ deger }}</a>{% endfor %}
+    </div>
+  </section>
+  {% else %}
+  <div class="mesaj mesaj--warning">“{{ q }}” ile eşleşen lot, seri no veya parça kodu bulunamadı.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}

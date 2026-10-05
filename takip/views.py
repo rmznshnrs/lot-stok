@@ -130,13 +130,18 @@ def _seri_parcala(metin):
     return [p for p in re.split(r'[\s,;]+', metin) if p]
 
 
-def satis(request):
-    q = request.GET.get('q', '').strip()
+def satis_formu_isle(request):
+    """Satış formunu işler (masaüstü ve mobil ortak).
+
+    POST'ta seri listesini doğrular; islem=kaydet ise satışı kaydeder ve mesajları
+    ekler. Şablon için bağlam sözlüğü döndürür; 'kaydedildi' True ise çağıran
+    yönlendirme yapmalıdır.
+    """
     form = SatisForm(request.POST or None)
     uretimler, seri_hatalari, onay = [], [], False
+    islem = request.POST.get('islem', '') if request.method == 'POST' else ''
 
     if request.method == 'POST':
-        islem = request.POST.get('islem', '')
         onay = request.POST.get('onay') == '1'
         kaldirilacak = islem[len('kaldir:'):] if islem.startswith('kaldir:') else None
         eklenecek = request.POST.getlist('seri') + _seri_parcala(request.POST.get('yeni_seri', ''))
@@ -182,21 +187,28 @@ def satis(request):
                             request, f'{u["seri_no"]} geri çağrılan lot içeriyor: '
                                      f'{", ".join(u["lotlar"])}.'
                         )
-                    return redirect('takip:satis')
+                    return {'kaydedildi': True}
 
     uyarilar = {u['seri_no']: u['lotlar'] for u in satis_uyarilari([u.seri_no for u in uretimler])}
-    sepet = [{'uretim': u, 'geri_lotlar': uyarilar.get(u.seri_no, [])} for u in uretimler]
-    return render(request, 'takip/satis.html', {
-        'aktif': 'satis',
+    return {
+        'kaydedildi': False,
         'form': form,
-        'form_hatalari_goster': request.POST.get('islem') == 'kaydet',
-        'sepet': sepet,
+        'form_hatalari_goster': islem == 'kaydet',
+        'sepet': [{'uretim': u, 'geri_lotlar': uyarilar.get(u.seri_no, [])} for u in uretimler],
         'uyari_var': bool(uyarilar),
         'onay': onay,
         'seri_hatalari': seri_hatalari,
-        'gecmis': satis_gecmisi(q),
-        'q': q,
         'musteriler': Musteri.objects.order_by('ad'),
+    }
+
+
+def satis(request):
+    baglam = satis_formu_isle(request)
+    if baglam['kaydedildi']:
+        return redirect('takip:satis')
+    q = request.GET.get('q', '').strip()
+    return render(request, 'takip/satis.html', {
+        **baglam, 'aktif': 'satis', 'gecmis': satis_gecmisi(q), 'q': q,
     })
 
 

@@ -59,6 +59,56 @@ Bir sorun çıktığında **İzlenebilirlik** ekranından lot veya seri no ile g
 | **Satış** | Müşteri ve tarih seçilir, seri numaraları eklenir. Barkod okuyucu için tek seferde birden fazla numara girilebilir. Geri çağrılan lot içeren ürün listede uyarıyla gösterilir; böyle bir ürün varsa satış ancak onay kutusu işaretlenince kaydedilir. Ekranda satış geçmişi de bulunur. |
 | **İzlenebilirlik** | İki sekme vardır. **Lot → Ürün → Müşteri** sekmesinde lotun kullanıldığı seri numaraları (satıldı / depoda), etkilenen müşteriler ve iletişim bilgileri ile **Bu lotu geri çağır** düğmesi bulunur. **Seri No → Parçalar** sekmesinde ürünün içindeki parçalar; lot, tedarikçi ve adetleriyle listelenir. |
 
+## Mobil uygulama (PWA)
+
+Depoda ve sevkiyatta telefondan kullanmak için **/m/** adresinde üç ekranlı bir mobil
+uygulama vardır. Alt sekme menüsüyle ekranlar arasında geçilir:
+
+| Ekran | Ne yapılır |
+|---|---|
+| **Sorgula** | Etiketteki barkod / karekod kamerayla okutulur ya da numara elle yazılır. Lot için kullanıldığı ürünler ve müşteriler özeti, seri no için içindeki parçalar ve lotlar gösterilir. |
+| **Mal girişi** | Parça kodu veya adı yazılır, lot numarası kamerayla okutulabilir (**Tara**). |
+| **Satış** | Müşteri seçilir, seri numaraları art arda okutularak listeye eklenir. Geri çağrılan lot içeren ürün listede uyarıyla gösterilir ve telefon titrer. |
+
+Uygulama telefonda **ana ekrana eklenebilir**; uygulama gibi tam ekran açılır.
+Veriler her zaman sunucudan güncel gelir. İnternet yoksa "Bağlantı yok" sayfası
+gösterilir.
+
+Kamera güvenlik nedeniyle yalnızca **HTTPS** bağlantıda açılır. Kamera açılmazsa
+numaralar elle girilebilir.
+
+### Telefonda deneme
+
+Bilgisayardaki sunucuya telefondan HTTPS ile erişmek için geçici bir tünel kullanılır.
+Ek program gerekmez; Windows'ta yerleşik `ssh` yeterlidir.
+
+1. Sunucuyu tünel adresine izin verecek şekilde başlatın (PowerShell). `DJANGO_DEBUG=0`
+   ayarı hata ayrıntılarının internete açılmaması içindir; `--insecure` bu durumda
+   CSS/JS dosyalarının yine sunulmasını sağlar.
+   ```powershell
+   $env:DJANGO_DEBUG = "0"
+   $env:DJANGO_ALLOWED_HOSTS = ".lhr.life"
+   $env:DJANGO_CSRF_TRUSTED_ORIGINS = "https://*.lhr.life"
+   .venv/Scripts/python manage.py runserver 8002 --insecure
+   ```
+2. İkinci bir terminalde tüneli açın:
+   ```bash
+   ssh -o StrictHostKeyChecking=accept-new -R 80:localhost:8002 nokey@localhost.run
+   ```
+   Çıktıda `https://….lhr.life` biçiminde bir adres yazar.
+3. Telefonda bu adresin sonuna **/m/** ekleyip açın. Kamera izni isteğine **İzin ver**
+   deyin.
+4. Ana ekrana eklemek için:
+   - **Android (Chrome):** ⋮ menüsü → *Ana ekrana ekle* / *Uygulamayı yükle*.
+   - **iPhone (Safari):** Paylaş düğmesi → *Ana Ekrana Ekle*.
+5. İşiniz bitince tünel terminalinde `Ctrl+C` ile tüneli kapatın.
+
+**Dikkat:** Tünel açıkken adresi bilen herkes uygulamaya erişebilir. Uygulama
+ekranlarında henüz giriş (kullanıcı adı / şifre) yoktur. Tüneli yalnızca deneme
+süresince açık tutun; gerçek veriyle uzun süre kullanmadan önce girişin eklenmesi
+gerekir. Ücretsiz tünelin adresi her açılışta değişir; ana ekrana eklenen uygulama
+eski adrese bağlı kalır.
+
 ## İş kuralları
 
 - **FIFO:** Üretimde parçalar sipariş tarihi en eski lottan düşülür; gerekirse bir parça
@@ -122,10 +172,15 @@ takip/
                              UretimTuketim, Musteri, Satis, SatisKalemi
   services.py                FIFO üretim, izlenebilirlik, satış, stok özeti
   forms.py, views.py, urls.py, admin.py
+  views_mobil.py             mobil (PWA) ekranlar, manifest, service worker
   tests.py
   templates/takip/           base.html + ekran şablonları
-  static/takip/style.css
+    mobil/                   mobil ekran şablonları
+  static/takip/style.css     masaüstü + mobil
+  static/takip/mobil.js      kamera ile barkod okuma, satış listesi
+  static/takip/vendor/       ZXing barkod kütüphanesi (Apache-2.0)
+  static/takip/ikon/         uygulama ikonları
   management/commands/ornek_veri.py
-docs/mockup/                 onaylı tasarım (V2*.dc.html)
+docs/mockup/                 onaylı tasarım (V2*.dc.html, Mobile*.dc.html)
 CLAUDE.md                    şema ve kurallar (geliştirme notları)
 ```

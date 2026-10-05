@@ -52,6 +52,31 @@ def parca_stoklari(queryset=None):
     )
 
 
+def parca_bul(metin):
+    """Kod, ad ya da "KOD – Ad" yazımından parçayı bulur.
+
+    Önce kod, sonra ad birebir (büyük/küçük harf duyarsız) aranır; yoksa kodunda
+    veya adında metin geçen tek parça kabul edilir. Bulunamazsa veya birden fazla
+    parça eşleşirse ValueError fırlatır.
+    """
+    deger = metin.strip()
+    if not deger:
+        raise ValueError('Parça kodu veya adı girin.')
+    kod = deger.split(' – ')[0].strip()  # öneri listesi "KOD – Ad" biçimi
+    parca = (Parca.objects.filter(kod__iexact=kod).first()
+             or Parca.objects.filter(ad__iexact=deger).first())
+    if parca:
+        return parca
+    adaylar = list(Parca.objects.filter(Q(kod__icontains=deger) | Q(ad__icontains=deger))
+                   .order_by('kod')[:6])
+    if len(adaylar) == 1:
+        return adaylar[0]
+    if adaylar:
+        raise ValueError(f'"{deger}" birden fazla parçayla eşleşti: '
+                         f'{", ".join(p.kod for p in adaylar)}. Kodu yazın.')
+    raise ValueError(f'"{deger}" adlı veya kodlu parça bulunamadı.')
+
+
 def mal_girisi(parca, tedarikci_adi, lot_no, adet, siparis_tarihi, siparis_no=''):
     """Yeni stok lotu oluşturur; tedarikçi adı yoksa tedarikçiyi de oluşturur.
 

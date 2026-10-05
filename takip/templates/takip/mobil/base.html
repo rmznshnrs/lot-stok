@@ -1,0 +1,68 @@
+{% load static %}<!doctype html>
+<html lang="tr" data-sw-url="{% url 'takip:m_sw' %}" data-sw-scope="{% url 'takip:m_sorgula' %}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4E8C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lot Takip">
+<title>{% block baslik %}Lot Takip{% endblock %} – Lot Takip</title>
+<link rel="manifest" href="{% url 'takip:m_manifest' %}">
+<link rel="icon" type="image/png" sizes="32x32" href="{% static 'takip/ikon/favicon-32.png' %}">
+<link rel="apple-touch-icon" href="{% static 'takip/ikon/apple-touch-icon.png' %}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="{% static 'takip/style.css' %}">
+</head>
+<body class="mobil">
+<header class="m-ust">
+  <a class="m-logo" href="{% url 'takip:ana_sayfa' %}" title="Masaüstü görünümü">LOT TAKİP</a>
+  <h1>{% block sayfa_basligi %}{% endblock %}</h1>
+</header>
+
+{% if messages %}
+<div class="m-mesajlar" role="status">
+  {% for m in messages %}<div class="mesaj mesaj--{{ m.tags }}">{{ m }}</div>{% endfor %}
+</div>
+{% endif %}
+
+<main class="m-icerik">
+{% block icerik %}{% endblock %}
+</main>
+
+<nav class="m-alt-menu" aria-label="Mobil menü">
+  <a href="{% url 'takip:m_sorgula' %}"{% if aktif == 'sorgula' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>
+    Sorgula
+  </a>
+  <a href="{% url 'takip:m_giris' %}"{% if aktif == 'giris' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8"/></svg>
+    Mal girişi
+  </a>
+  <a href="{% url 'takip:m_satis' %}"{% if aktif == 'satis' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h2l2.4 11h9.2L20 8H7.2M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/></svg>
+    Satış
+  </a>
+</nav>
+
+{# Mal girişi ve satışta açılan tam ekran tarayıcı #}
+<div id="tarama-penceresi" class="m-pencere" role="dialog" aria-modal="true" aria-labelledby="tarama-basligi" hidden>
+  <div class="m-pencere-ust">
+    <span id="tarama-basligi" data-baslik>Barkod tara</span>
+    <button type="button" class="m-pencere-kapat" data-kapat>Bitti</button>
+  </div>
+  <div class="m-kamera m-kamera--pencere">
+    <video playsinline muted></video>
+    <div class="m-kamera-cerceve" aria-hidden="true"></div>
+    <div class="m-kamera-metin" data-durum>Kamera açılıyor…</div>
+  </div>
+  <div class="m-pencere-son" data-son aria-live="polite"></div>
+</div>
+
+<script src="{% static 'takip/vendor/zxing.min.js' %}" defer></script>
+<script src="{% static 'takip/mobil.js' %}" defer></script>
+</body>
+</html>

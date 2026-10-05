@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Lot Sorgula – Mobil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#F4F3EF;color:#1C1F24}
+a{color:#1F4E8C}a:hover{color:#163A69}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #F4F3EF; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1C1F24">
+<div style="padding: 28px 20px 16px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; color: #5B616B">LOT TAKİP</div>
+<h1 style="margin: 0; font-size: 24px; font-weight: 600">Lot / seri sorgula</h1>
+</div>
+<div style="flex-grow: 1; padding: 0 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="height: 220px; border-radius: 16px; background: #1C1F24; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+<div style="width: 180px; height: 110px; border: 2px dashed #9AA3AE; border-radius: 10px"></div>
+<div style="font-size: 14px; color: #E8E6E1">Barkodu / etiketi kameraya tutun</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="m" style="font-size: 13px; color: #5B616B">veya elle girin</label>
+<div style="display: flex; gap: 8px">
+<input id="m" placeholder="L-2409-117" style="flex-grow: 1; height: 48px; border: 1px solid #C9C6BD; border-radius: 10px; padding: 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; background: #FFFFFF">
+<button style="height: 48px; padding: 0 18px; border-radius: 10px; border: none; background: #1F4E8C; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 500">Sorgula</button>
+</div>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500">L-2409-117</span>
+<span style="padding: 3px 10px; border-radius: 99px; background: #FDEBD9; color: #8A3B00; font-size: 12px; font-weight: 500">Geri çağırma</span>
+</div>
+<div style="font-size: 15px; font-weight: 600">1N4001 Diyot</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Tedarikçi</span><span>[Tedarikçi]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Kalan stok</span><span>[adet]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Kullanıldığı ürün</span><span>[x] seri no</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Satılan müşteri</span><span>[y] müşteri</span></div>
+</div>
+<a href="#" style="height: 44px; border-radius: 10px; border: 1px solid #C9C6BD; display: flex; align-items: center; justify-content: center; text-decoration: none; color: #1C1F24; font-size: 14px; font-weight: 500">Detaylı izi gör</a>
+</div>
+</div>
+<nav style="display: flex; background: #FFFFFF; border-top: 1px solid #E2DFD7; padding: 8px 8px 20px">
+<a href="MobileScan.dc.html" style="flex-grow: 1; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: #1F4E8C; font-size: 13px; font-weight: 600">Sorgula</a>
+<a href="MobileEntry.dc.html" style="flex-grow: 1; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: #5B616B; font-size: 13px">Mal girişi</a>
+<a href="MobileSale.dc.html" style="flex-grow: 1; height: 48px; display: flex; align-items: center; justify-content: center; text-decoration: none; color: #5B616B; font-size: 13px">Satış</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

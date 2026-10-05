@@ -1,0 +1,57 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Mal girişi{% endblock %}
+{% block sayfa_basligi %}Depoya mal girişi{% endblock %}
+{% block icerik %}
+<form method="post" class="m-form" novalidate>
+  {% csrf_token %}
+  {% for e in form.non_field_errors %}<div class="mesaj mesaj--error">{{ e }}</div>{% endfor %}
+
+  <div class="alan">
+    <label for="{{ form.parca.id_for_label }}">{{ form.parca.label }}</label>
+    {{ form.parca }}
+    {% for e in form.parca.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+  <datalist id="parca-listesi">
+    {% for p in parcalar %}<option value="{{ p.kod }}">{{ p.ad }}</option>{% endfor %}
+  </datalist>
+
+  <div class="alan">
+    <label for="{{ form.tedarikci.id_for_label }}">Tedarikçi</label>
+    {{ form.tedarikci }}
+    {% for e in form.tedarikci.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+  <datalist id="tedarikci-listesi">
+    {% for t in tedarikciler %}<option value="{{ t.ad }}">{% endfor %}
+  </datalist>
+
+  <div class="alan">
+    <label for="{{ form.lot_no.id_for_label }}">{{ form.lot_no.label }}</label>
+    <div class="m-satir">
+      {{ form.lot_no }}
+      <button type="button" class="btn btn--ikincil m-btn-tara" data-tara-hedef="{{ form.lot_no.id_for_label }}" data-tara-baslik="Lot numarasını okutun" hidden>Tara</button>
+    </div>
+    {% for e in form.lot_no.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+
+  <div class="izgara-2">
+    <div class="alan">
+      <label for="{{ form.adet.id_for_label }}">{{ form.adet.label }}</label>
+      {{ form.adet }}
+      {% for e in form.adet.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+    <div class="alan">
+      <label for="{{ form.siparis_tarihi.id_for_label }}">{{ form.siparis_tarihi.label }}</label>
+      {{ form.siparis_tarihi }}
+      {% for e in form.siparis_tarihi.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+  </div>
+
+  <div class="alan">
+    <label for="{{ form.siparis_no.id_for_label }}">{{ form.siparis_no.label }}</label>
+    {{ form.siparis_no }}
+  </div>
+
+  <p class="not">Üretimde önce en eski sipariş tarihli lot kullanılır. Listede olmayan tedarikçi yeni tanımlanır.</p>
+  <button type="submit" class="btn m-btn-buyuk">Girişi kaydet</button>
+</form>
+{% endblock %}

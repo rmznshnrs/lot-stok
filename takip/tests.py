@@ -997,3 +997,221 @@ class SenaryodaBulunanHatalarTest(TemelVeri):
         }, follow=True)
         self.assertContains(yanit, 'Yeni tedarikçi tanımlandı: Elektro A.Ş.<')
         self.assertNotContains(yanit, 'A.Ş..')
+
+
+# --- Mobil (PWA) ---------------------------------------------------------------
+
+class ParcaBulTest(TemelVeri):
+    def test_kod_ad_kismi_ve_hatalar(self):
+        self.assertEqual(services.parca_bul(' led '), self.led)
+        self.assertEqual(services.parca_bul('diyot'), self.diyot)
+        self.assertEqual(services.parca_bul('DIY – Diyot'), self.diyot)
+        self.assertEqual(services.parca_bul('iyo'), self.diyot)
+        Parca.objects.create(kod='DIY-2', ad='Diyot 2')
+        with self.assertRaisesMessage(ValueError, 'birden fazla'):
+            services.parca_bul('iyo')
+        with self.assertRaisesMessage(ValueError, 'bulunamadı'):
+            services.parca_bul('yok')
+        with self.assertRaises(ValueError):
+            services.parca_bul('  ')
+
+
+class MobilOrtakTest(TestCase):
+    def test_ekranlar_acilir_ve_alt_menu(self):
+        for ad, aktif in (('m_sorgula', 'Sorgula'), ('m_giris', 'Mal girişi'),
+                          ('m_satis', 'Satış')):
+            with self.subTest(ad=ad):
+                yanit = self.client.get(reverse(f'takip:{ad}'))
+                self.assertEqual(yanit.status_code, 200)
+                self.assertContains(yanit, 'class="mobil"')
+                self.assertContains(yanit, 'class="m-alt-menu"')
+                self.assertContains(yanit, 'class="aktif" aria-current="page">')
+                self.assertRegex(yanit.content.decode(),
+                                 rf'class="aktif" aria-current="page">\s*<svg[^>]*>.*</svg>\s*{aktif}')
+                self.assertContains(yanit, 'rel="manifest" href="/m/manifest.json"')
+                self.assertContains(yanit, 'rel="apple-touch-icon"')
+                self.assertContains(yanit, 'takip/vendor/zxing.min.js')
+                self.assertContains(yanit, 'data-sw-url="/m/sw.js"')
+                self.assertNotIn('[', yanit.content.decode().split('<nav class="m-alt-menu"')[0])
+
+    def test_manifest(self):
+        yanit = self.client.get(reverse('takip:m_manifest'))
+        self.assertEqual(yanit['Content-Type'], 'application/manifest+json')
+        m = yanit.json()
+        self.assertEqual((m['start_url'], m['scope'], m['display']), ('/m/', '/m/', 'standalone'))
+        self.assertEqual(m['theme_color'], '#1F4E8C')
+        self.assertEqual(m['background_color'], '#F6F5F1')
+        boyutlar = {(i['sizes'], i.get('purpose', 'any')) for i in m['icons']}
+        self.assertEqual(boyutlar, {('192x192', 'any'), ('512x512', 'any'),
+                                    ('512x512', 'maskable')})
+
+    def test_ikon_dosyalari_gercek_boyutta(self):
+        import struct
+        from django.contrib.staticfiles import finders
+        for yol, boyut in (('ikon-192.png', 192), ('ikon-512.png', 512),
+                           ('ikon-maskable-512.png', 512), ('apple-touch-icon.png', 180)):
+            with self.subTest(yol=yol):
+                with open(finders.find(f'takip/ikon/{yol}'), 'rb') as f:
+                    bas = f.read(24)
+                self.assertEqual(bas[:8], b'\x89PNG\r\n\x1a\n')
+                self.assertEqual(struct.unpack('>II', bas[16:24]), (boyut, boyut))
+
+    def test_service_worker(self):
+        yanit = self.client.get(reverse('takip:m_sw'))
+        self.assertEqual(yanit['Content-Type'], 'application/javascript; charset=utf-8')
+        self.assertIn('no-cache', yanit['Cache-Control'])
+        js = yanit.content.decode()
+        self.assertIn("const CEVRIMDISI = '/m/cevrimdisi/'", js)
+        self.assertIn('style.css', js)
+        self.assertIn("if (istek.method !== 'GET') return;", js)  # POST önbelleğe alınmaz
+        self.assertRegex(js, r"const ONBELLEK = 'lot-takip-[0-9a-f]{12}'")
+        self.assertEqual(self.client.get(reverse('takip:m_cevrimdisi')).status_code, 200)
+
+    def test_sw_surumu_dosya_degisince_degisir(self):
+        import os
+        from django.contrib.staticfiles import finders
+        from . import views_mobil
+        once = views_mobil.onbellek_surumu()
+        dosya = finders.find('takip/mobil.js')
+        bilgi = os.stat(dosya)
+        try:
+            os.utime(dosya, ns=(bilgi.st_atime_ns, bilgi.st_mtime_ns + 1_000_000_000))
+            self.assertNotEqual(views_mobil.onbellek_surumu(), once)
+        finally:
+            os.utime(dosya, ns=(bilgi.st_atime_ns, bilgi.st_mtime_ns))
+        self.assertEqual(views_mobil.onbellek_surumu(), once)
+
+    def test_masaustunden_mobile_baglanti(self):
+        self.assertContains(self.client.get(reverse('takip:parcalar')), 'href="/m/">Mobil</a>')
+
+
+class MobilSorgulaTest(TemelVeri):
+    url = reverse_lazy('takip:m_sorgula')
+
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
+        services.satis_yap(self.musteri, ['SN-IP-0001'], tarih=date(2026, 5, 12))
+
+    def test_bos(self):
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'Kamerayı aç')
+        self.assertContains(yanit, 'veya elle girin')
+        self.assertNotContains(yanit, 'm-kamera--kucuk')
+
+    def test_lot_ozeti(self):
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        yanit = self.client.get(self.url, {'q': 'l-d-eski'})
+        self.assertEqual(yanit.context['sonuc']['tur'], 'lot')
+        self.assertContains(yanit, 'm-kamera--kucuk')
+        self.assertContains(yanit, 'rozet rozet--uyari">Geri çağrıldı')
+        self.assertContains(yanit, '3 seri no')
+        self.assertContains(yanit, '1 müşteri')
+        self.assertContains(yanit, 'Atlas')
+        self.assertContains(yanit, 'Depodaki ürünler (2)')
+        self.assertContains(yanit, 'sevkiyattan önce ayrılmalı')
+        self.assertContains(yanit, '/izlenebilirlik/?lot=L-D-ESKI')
+
+    def test_seri_parcalari(self):
+        yanit = self.client.get(self.url, {'q': 'sn-ip-0001'})
+        self.assertEqual(yanit.context['sonuc']['tur'], 'seri')
+        self.assertContains(yanit, 'rozet rozet--uyari">Satıldı')
+        self.assertContains(yanit, 'Atlas · 12.05.2026')
+        self.assertContains(yanit, 'L-D-ESKI')
+        self.assertContains(yanit, '4 adet')  # LED
+        self.assertContains(yanit, '?q=L-LED')  # lota dokununca lot sorgusu
+
+    def test_parca_kodu(self):
+        yanit = self.client.get(self.url, {'q': 'DIY'})
+        self.assertEqual(yanit.context['sonuc']['tur'], 'parca')
+        self.assertNotContains(yanit, 'L-D-ESKI')  # 4 üretimde bitti, biten lot gösterilmez
+        self.assertContains(yanit, 'L-D-YENI <span class="lot-etiket">· sıradaki</span>')
+        self.assertContains(yanit, '· geri çağrıldı')  # L-D-GERI
+
+    def test_aday_ve_bulunamadi(self):
+        self.assertContains(self.client.get(self.url, {'q': 'SN-IP'}), 'birebir eşleşmedi')
+        self.assertContains(self.client.get(self.url, {'q': 'XYZ'}), 'bulunamadı')
+
+
+class MobilGirisTest(TemelVeri):
+    url = reverse_lazy('takip:m_giris')
+
+    def test_ekran(self):
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'Depoya mal girişi')
+        self.assertContains(yanit, 'data-tara-hedef="id_lot_no"')
+        self.assertContains(yanit, '<option value="DIY">Diyot</option>')
+
+    def test_parca_adiyla_kaydet(self):
+        yanit = self.client.post(self.url, {
+            'parca': 'diyot', 'tedarikci': 'Tedarikçi A', 'lot_no': ' L-D-MOBIL ',
+            'adet': 12, 'siparis_tarihi': '2026-09-20', 'siparis_no': 'IRS-1',
+        }, follow=True)
+        self.assertRedirects(yanit, self.url)
+        lot = StokLotu.objects.get(lot_no='L-D-MOBIL')
+        self.assertEqual((lot.parca, lot.kalan_adet, lot.siparis_no), (self.diyot, 12, 'IRS-1'))
+        self.assertContains(yanit, 'L-D-MOBIL kaydedildi: 12 adet Diyot.')
+
+    def test_hatalar(self):
+        yanit = self.client.post(self.url, {
+            'parca': 'yok', 'tedarikci': 'X', 'lot_no': 'L-LED', 'adet': 0,
+            'siparis_tarihi': '2026-09-20',
+        })
+        self.assertContains(yanit, 'adlı veya kodlu parça bulunamadı')
+        self.assertContains(yanit, 'Bu lot numarası zaten kayıtlı.')
+        self.assertEqual(StokLotu.objects.count(), 4)
+
+
+class MobilSatisTest(TemelVeri):
+    url = reverse_lazy('takip:m_satis')
+    api = reverse_lazy('takip:m_seri_kontrol')
+
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
+
+    def test_seri_kontrol_api(self):
+        self.assertEqual(self.client.get(self.api, {'no': 'sn-ip-0004'}).json(),
+                         {'ok': True, 'seri_no': 'SN-IP-0004', 'urun': 'İndikatör Paneli',
+                          'geri_lotlar': []})
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        self.assertEqual(self.client.get(self.api, {'no': 'SN-IP-0001'}).json()['geri_lotlar'],
+                         ['L-D-ESKI'])
+        services.satis_yap(self.musteri, ['SN-IP-0002'])
+        yanit = self.client.get(self.api, {'no': 'SN-IP-0002'}).json()
+        self.assertFalse(yanit['ok'])
+        self.assertIn('daha önce satılmış', yanit['hata'])
+        self.assertIn('bulunamadı', self.client.get(self.api, {'no': 'YOK'}).json()['hata'])
+        self.assertEqual(self.client.post(self.api, {'no': 'SN-IP-0001'}).status_code, 405)
+
+    def test_ekran(self):
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'id="m-seri-tara"')
+        self.assertContains(yanit, 'data-kontrol-url="/m/api/seri/"')
+        self.assertContains(yanit, '<template id="m-sepet-sablon">')
+        self.assertContains(yanit, '0 ürün')
+
+    def test_javascriptsiz_ekle_ve_kaydet(self):
+        veri = {'musteri': 'Atlas', 'tarih': '2026-06-01'}
+        yanit = self.client.post(self.url, {**veri, 'yeni_seri': 'sn-ip-0001', 'islem': 'ekle'})
+        self.assertContains(yanit, 'name="seri" value="SN-IP-0001"')
+        self.assertEqual(Satis.objects.count(), 0)
+        yanit = self.client.post(self.url, {**veri, 'seri': ['SN-IP-0001', 'SN-IP-0004'],
+                                            'islem': 'kaydet'}, follow=True)
+        self.assertRedirects(yanit, self.url)
+        self.assertContains(yanit, 'Satış kaydedildi: Atlas, 2 ürün')
+        self.assertEqual(Satis.objects.get().kalemler.count(), 2)
+
+    def test_geri_cagrilan_lot_onay_ister(self):
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        veri = {'musteri': 'Atlas', 'tarih': '2026-06-01', 'seri': ['SN-IP-0001'],
+                'islem': 'kaydet'}
+        yanit = self.client.post(self.url, veri)
+        self.assertContains(yanit, 'm-sepet-oge m-sepet-oge--uyari')
+        self.assertContains(yanit, 'Geri çağrılan lot içeriyor (L-D-ESKI)')
+        self.assertRegex(yanit.content.decode(), r'<label id="m-onay"[^>]*>')
+        self.assertNotRegex(yanit.content.decode(), r'<label id="m-onay"[^>]*hidden')
+        self.assertEqual(Satis.objects.count(), 0)
+        yanit = self.client.post(self.url, {**veri, 'onay': '1'}, follow=True)
+        self.assertEqual(Satis.objects.count(), 1)
+        self.assertContains(yanit, 'SN-IP-0001 geri çağrılan lot içeriyor: L-D-ESKI.')

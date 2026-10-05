@@ -1,0 +1,10 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Bağlantı yok{% endblock %}
+{% block sayfa_basligi %}Bağlantı yok{% endblock %}
+{% block icerik %}
+<section class="m-kart">
+  <p class="not not--buyuk">Sunucuya ulaşılamıyor. Stok ve satış bilgileri her zaman güncel olması için çevrimdışı gösterilmez.</p>
+  <p class="not">İnternet bağlantınızı kontrol edip yeniden deneyin.</p>
+  <button type="button" class="btn m-btn-buyuk" onclick="location.reload()">Yeniden dene</button>
+</section>
+{% endblock %}

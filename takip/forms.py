@@ -1,9 +1,9 @@
 from django import forms
-from django.db.models import Q
 from django.forms import inlineformset_factory
 from django.utils import timezone
 
 from .models import Parca, StokLotu, Urun, UrunAgaci
+from .services import parca_bul
 
 
 class ParcaForm(forms.ModelForm):
@@ -86,22 +86,10 @@ class YeniAgacSatiriForm(forms.Form):
         deger = self.cleaned_data['yeni_parca'].strip()
         if not deger:
             return None
-        kod = deger.split(' – ')[0].strip()  # datalist "KOD – Ad" biçimini de kabul et
-        # Önce kod, sonra ad birebir; yoksa kod veya adda geçen tek parça.
-        parca = (Parca.objects.filter(kod__iexact=kod).first()
-                 or Parca.objects.filter(ad__iexact=deger).first())
-        if parca:
-            return parca
-        adaylar = list(Parca.objects.filter(Q(kod__icontains=deger) | Q(ad__icontains=deger))
-                       .order_by('kod')[:6])
-        if len(adaylar) == 1:
-            return adaylar[0]
-        if adaylar:
-            raise forms.ValidationError(
-                f'"{deger}" birden fazla parçayla eşleşti: '
-                f'{", ".join(p.kod for p in adaylar)}. Kodu yazın.'
-            )
-        raise forms.ValidationError(f'"{deger}" adlı veya kodlu parça bulunamadı.')
+        try:
+            return parca_bul(deger)
+        except ValueError as hata:
+            raise forms.ValidationError(str(hata))
 
     def clean(self):
         temiz = super().clean()
@@ -173,3 +161,26 @@ class SatisForm(forms.Form):
         label='Satış tarihi', initial=timezone.localdate,
         widget=forms.DateInput(attrs={'class': 'girdi', 'type': 'date'}, format='%Y-%m-%d'),
     )
+
+
+class MobilMalGirisiForm(MalGirisiForm):
+    """Telefonda mal girişi: parça açılır liste yerine kod veya adla yazılır."""
+
+    parca = forms.CharField(
+        label='Parça kodu', max_length=200,
+        widget=forms.TextInput(attrs={'class': 'girdi girdi--mono', 'list': 'parca-listesi',
+                                      'placeholder': 'örn. 1N4001', 'autocomplete': 'off',
+                                      'autocapitalize': 'characters'}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['lot_no'].widget.attrs.update({'autocapitalize': 'characters',
+                                                  'autocomplete': 'off'})
+        self.fields['adet'].widget.attrs['inputmode'] = 'numeric'
+
+    def clean_parca(self):
+        try:
+            return parca_bul(self.cleaned_data['parca'])
+        except ValueError as hata:
+            raise forms.ValidationError(str(hata))

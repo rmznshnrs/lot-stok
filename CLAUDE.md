@@ -31,8 +31,9 @@ SatisKalemi    (satis, uretim)                  -- satılan seri numaraları
 Notlar: lot_no, seri_no, Parca.kod, Urun.kod/seri_oneki tekil. SatisKalemi.uretim
 OneToOne (bir seri no bir kez satılır). İlişkiler PROTECT (UrunAgaci.urun hariç).
 kalan_adet boş bırakılırsa giris_adet ile dolar. giris_zamani mal girişinin
-kaydedildiği an (son hareketlerde kullanılır); FIFO yine siparis_tarihi'ne göredir. Admin'de Uretim/UretimTuketim salt
-okunur (üretim yalnızca services ile); üretim ve satış kayıtları admin'den silinemez.
+kaydedildiği an (son hareketlerde kullanılır); FIFO yine siparis_tarihi'ne göredir.
+Admin'de Uretim/UretimTuketim salt okunur (üretim yalnızca services ile); üretim ve
+satış kayıtları admin'den silinemez.
 Sanal ortam: .venv (`.venv\Scripts\python manage.py ...`).
 
 ## Kurallar
@@ -58,6 +59,30 @@ Sanal ortam: .venv (`.venv\Scripts\python manage.py ...`).
 - Ürünler: ürün listesi + ürün ağacı düzenleme
 - Parçalar: parça tanımlama + parça listesi (toplam stok, lot sayısı, kullanıldığı ürünler)
 
+## Mobil (PWA, /m/) (mockup: docs/mockup/Mobile*.dc.html)
+Alt sekme menülü 3 ekran; telefonda ana ekrana eklenebilir. Masaüstüyle aynı
+services.py'yi kullanır, ayrı iş mantığı yoktur.
+- Sorgula (/m/): kamera ile barkod/karekod okutma veya elle giriş; numara
+  numara_ara ile algılanır. Lot → kullanıldığı ürünler ve müşteriler özeti;
+  seri no → içindeki parçalar ve lotlar; parça kodu → stoktaki lotlar.
+- Mal girişi (/m/giris/): parça kod/adla yazılır (parca_bul), lot no kamerayla
+  okutulabilir (Tara), mal_girisi ile kaydedilir.
+- Satış (/m/satis/): müşteri, tarih; seri numaraları okutulur veya elle girilir.
+  Her numara /m/api/seri/ ile (satilabilir_uretim + satis_uyarilari) sayfa
+  yenilemeden kontrol edilir; geri çağrılan lot içeren ürün uyarıyla gösterilir ve
+  onay kutusu işaretlenmeden satış kaydedilmez. Kayıt masaüstüyle ortak
+  views.satis_formu_isle ile yapılır.
+- Kod: views_mobil.py, templates/takip/mobil/, static/takip/mobil.js.
+  Barkod: tarayıcının BarcodeDetector'ı varsa o, yoksa ZXing
+  (static/takip/vendor/zxing.min.js, Apache-2.0, projeye kopyalandı).
+- PWA: /m/manifest.json, /m/sw.js (kapsam /m/), ikonlar static/takip/ikon/.
+  Service worker sayfaları her zaman ağdan alır (ağ yoksa /m/cevrimdisi/),
+  yalnız CSS/JS/ikonları önbellekler; POST ve API isteklerini önbelleğe almaz.
+  Önbellek sürümü dosyaların değişiklik zamanından hesaplanır; dosya değişince
+  telefon yeni sürümü kendisi alır.
+- Kamera yalnızca HTTPS (veya localhost) üzerinde açılır; JavaScript/kamera yoksa
+  her ekran elle girişle çalışır.
+
 Tasarım: zemin #F6F5F1, kart #FFFFFF, kenar #E2DFD7, ana renk #1F4E8C,
 uyarı/geri çağırma #FDEBD9 / #8A3B00, font IBM Plex Sans, kod/lot/seri IBM Plex Mono.
 
@@ -65,6 +90,10 @@ uyarı/geri çağırma #FDEBD9 / #8A3B00, font IBM Plex Sans, kod/lot/seri IBM P
 - Python 3 + Django, SQLite (ileride PostgreSQL)
 - Django şablonları + tek CSS dosyası, gerektiğinde az JavaScript
 - Django admin açık kalsın
+- Ortam değişkenleri: DJANGO_DB (başka SQLite dosyası), DJANGO_DEBUG,
+  DJANGO_SECRET_KEY, DJANGO_ALLOWED_HOSTS ve DJANGO_CSRF_TRUSTED_ORIGINS
+  (telefonda HTTPS tüneliyle deneme için, virgülle ayrılır)
+- İkonlar Pillow ile üretildi; Pillow çalışma zamanında gerekmez (requirements'ta yok)
 - Arayüz metinleri ve model adları Türkçe
 
 ## Klasör yapısı
@@ -72,9 +101,13 @@ uyarı/geri çağırma #FDEBD9 / #8A3B00, font IBM Plex Sans, kod/lot/seri IBM P
 lot-takip/
   CLAUDE.md, requirements.txt, manage.py
   config/                 settings, urls
-  takip/                  models, admin, services, forms, views, urls, tests
+  takip/                  models, admin, services, forms, views, views_mobil, urls, tests
     templates/takip/      base.html + ekran şablonları
-    static/takip/style.css
+      mobil/              mobil base.html, sorgula, giris, satis, cevrimdisi, sw.js
+    static/takip/style.css   (masaüstü + mobil, tek dosya)
+    static/takip/mobil.js    kamera / barkod okuma, satış listesi, SW kaydı
+    static/takip/vendor/     zxing.min.js + lisansı
+    static/takip/ikon/       PWA ikonları
     management/commands/ornek_veri.py
   docs/mockup/
 ```
