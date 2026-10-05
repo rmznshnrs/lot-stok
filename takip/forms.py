@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 from django.forms import inlineformset_factory
 from django.utils import timezone
 
@@ -86,10 +87,21 @@ class YeniAgacSatiriForm(forms.Form):
         if not deger:
             return None
         kod = deger.split(' – ')[0].strip()  # datalist "KOD – Ad" biçimini de kabul et
-        parca = Parca.objects.filter(kod__iexact=kod).first()
-        if parca is None:
-            raise forms.ValidationError(f'"{deger}" koduyla parça bulunamadı.')
-        return parca
+        # Önce kod, sonra ad birebir; yoksa kod veya adda geçen tek parça.
+        parca = (Parca.objects.filter(kod__iexact=kod).first()
+                 or Parca.objects.filter(ad__iexact=deger).first())
+        if parca:
+            return parca
+        adaylar = list(Parca.objects.filter(Q(kod__icontains=deger) | Q(ad__icontains=deger))
+                       .order_by('kod')[:6])
+        if len(adaylar) == 1:
+            return adaylar[0]
+        if adaylar:
+            raise forms.ValidationError(
+                f'"{deger}" birden fazla parçayla eşleşti: '
+                f'{", ".join(p.kod for p in adaylar)}. Kodu yazın.'
+            )
+        raise forms.ValidationError(f'"{deger}" adlı veya kodlu parça bulunamadı.')
 
     def clean(self):
         temiz = super().clean()

@@ -39,6 +39,11 @@ from .services import (
 )
 
 
+def _cumle(metin):
+    """Sonuna nokta ekler; ad zaten noktayla bitiyorsa ("A.Ş.") ikinci noktayı koymaz."""
+    return metin if metin.endswith('.') else f'{metin}.'
+
+
 # --- Ana sayfa ---------------------------------------------------------------
 
 def ana_sayfa(request):
@@ -171,7 +176,7 @@ def satis(request):
                                  f'({", ".join(seriler)}).'
                     )
                     if yeni_musteri:
-                        messages.info(request, f'Yeni müşteri tanımlandı: {musteri.ad}.')
+                        messages.info(request, _cumle(f'Yeni müşteri tanımlandı: {musteri.ad}'))
                     for u in sonuc.uyarilar:
                         messages.warning(
                             request, f'{u["seri_no"]} geri çağrılan lot içeriyor: '
@@ -215,12 +220,12 @@ def stok(request):
             except ValueError as hata:
                 form.add_error(None, str(hata))
             else:
-                messages.success(
-                    request, f'{lot.lot_no} stoğa eklendi: {lot.giris_adet} {lot.parca.birim} '
-                             f'{lot.parca.kod} – {lot.parca.ad}.'
-                )
+                messages.success(request, _cumle(
+                    f'{lot.lot_no} stoğa eklendi: {lot.giris_adet} {lot.parca.birim} '
+                    f'{lot.parca.kod} – {lot.parca.ad}'
+                ))
                 if yeni_tedarikci:
-                    messages.info(request, f'Yeni tedarikçi tanımlandı: {lot.tedarikci.ad}.')
+                    messages.info(request, _cumle(f'Yeni tedarikçi tanımlandı: {lot.tedarikci.ad}'))
                 return redirect(f"{reverse('takip:stok')}?{urlencode({'q': lot.lot_no})}")
     else:
         secili = Parca.objects.filter(kod__iexact=parca_kod).first() if parca_kod else None

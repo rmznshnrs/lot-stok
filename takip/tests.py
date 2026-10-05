@@ -853,3 +853,147 @@ class SatisEkraniTest(TemelVeri):
         yanit = self.client.get(self.url, {'q': 'atl'})
         self.assertEqual(len(yanit.context['gecmis']), 1)
         self.assertEqual(len(self.client.get(self.url, {'q': 'zzz'}).context['gecmis']), 0)
+
+
+class UcanUcaSenaryoTest(TestCase):
+    """ADIMLAR.md Adım 8: boş veritabanında, yalnızca ekranlar (form gönderimleri) ile."""
+
+    def ok(self, yanit, *metinler):
+        self.assertEqual(yanit.status_code, 200)
+        for metin in metinler:
+            self.assertContains(yanit, metin)
+        return yanit
+
+    def test_senaryo(self):
+        c = self.client
+
+        # 1. Üç parça tanımla, İndikatör Paneli'ni bunlarla tanımla.
+        for kod, ad in (('1N4001', 'Diyot'), ('PCB-IP', 'Elektronik kart (PCB)'),
+                        ('KASA-IP', 'Kasa')):
+            yanit = c.post(reverse('takip:parcalar'),
+                           {'kod': kod, 'ad': ad, 'birim': 'adet', 'min_stok': 2}, follow=True)
+            self.ok(yanit, f'{kod} – {ad} kaydedildi.', 'Henüz hiçbir ürün ağacında yok')
+        yanit = c.post(reverse('takip:urun_yeni'), {
+            'ad': 'İndikatör Paneli', 'kod': 'IP', 'seri_oneki': 'SN-IP-',
+            'agac-TOTAL_FORMS': 0, 'agac-INITIAL_FORMS': 0,
+            'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+            'yeni_parca': '1N4001', 'yeni_adet': 2, 'islem': 'ekle',
+        }, follow=True)
+        self.ok(yanit, '1N4001 ürün ağacına eklendi.')
+        urun = Urun.objects.get(kod='IP')
+        urun_url = reverse('takip:urun', args=[urun.pk])
+        for kod in ('PCB-IP', 'KASA-IP'):
+            satirlar = list(urun.agac.order_by('parca__kod'))
+            veri = {'ad': urun.ad, 'kod': urun.kod, 'seri_oneki': urun.seri_oneki,
+                    'agac-TOTAL_FORMS': len(satirlar), 'agac-INITIAL_FORMS': len(satirlar),
+                    'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+                    'yeni_parca': kod, 'yeni_adet': 1, 'islem': 'ekle'}
+            for i, s in enumerate(satirlar):
+                veri.update({f'agac-{i}-id': s.pk, f'agac-{i}-parca': s.parca_id,
+                             f'agac-{i}-adet': s.adet})
+            self.ok(c.post(urun_url, veri, follow=True), f'{kod} ürün ağacına eklendi.')
+        self.assertEqual(dict(urun.agac.values_list('parca__kod', 'adet')),
+                         {'1N4001': 2, 'PCB-IP': 1, 'KASA-IP': 1})
+        self.ok(c.get(reverse('takip:parcalar')), '>İndikatör Paneli</a>')
+
+        # 2. Diyottan farklı tarihli 2 lot gir (+ diğer parçalar için birer lot).
+        # Eski lotta üretimden sonra parça kalsın ki 6. adımda atlanması anlamlı olsun.
+        lotlar = (('1N4001', 'L-D-EYLUL', '2026-09-01', 15),
+                  ('1N4001', 'L-D-EKIM', '2026-10-01', 30),
+                  ('PCB-IP', 'L-PCB-1', '2026-09-10', 20),
+                  ('KASA-IP', 'L-KASA-1', '2026-09-12', 20))
+        for kod, lot_no, tarih, adet in lotlar:
+            yanit = c.post(reverse('takip:stok'), {
+                'parca': Parca.objects.get(kod=kod).pk, 'tedarikci': 'Elektro A.Ş.',
+                'lot_no': lot_no, 'adet': adet, 'siparis_tarihi': tarih,
+            }, follow=True)
+            self.ok(yanit, f'{lot_no} stoğa eklendi')
+        yanit = self.ok(c.get(reverse('takip:stok')), 'Toplam: 45')
+        self.assertContains(yanit, 'L-D-EYLUL</a> <span class="lot-etiket">· sıradaki</span>')
+
+        # 3. 5 panel üret → en eski lottan düşmeli.
+        uretim_url = reverse('takip:uretim')
+        self.ok(c.get(uretim_url, {'urun': urun.pk, 'adet': 5}),
+                'L-D-EYLUL × 10', 'SN-IP-0001 … SN-IP-0005')
+        yanit = c.post(uretim_url, {'urun': urun.pk, 'adet': 5}, follow=True)
+        self.ok(yanit, 'Üretim kaydedildi: 5 adet İndikatör Paneli', '>SN-IP-0005</a>')
+        self.assertEqual(StokLotu.objects.get(lot_no='L-D-EYLUL').kalan_adet, 5)
+        self.assertEqual(StokLotu.objects.get(lot_no='L-D-EKIM').kalan_adet, 30)
+        self.ok(c.get(reverse('takip:izlenebilirlik'), {'seri': 'SN-IP-0003'}),
+                '>L-D-EYLUL</a>')
+
+        # 4. 2 paneli bir müşteriye sat.
+        satis_url = reverse('takip:satis')
+        yanit = self.ok(c.post(satis_url, {'musteri': 'Atlas Otomasyon', 'tarih': '2026-10-03',
+                                           'yeni_seri': 'SN-IP-0001 SN-IP-0002',
+                                           'islem': 'ekle'}), '2 ürün')
+        yanit = c.post(satis_url, {'musteri': 'Atlas Otomasyon', 'tarih': '2026-10-03',
+                                   'seri': ['SN-IP-0001', 'SN-IP-0002'], 'islem': 'kaydet'},
+                       follow=True)
+        self.ok(yanit, 'Satış kaydedildi: Atlas Otomasyon, 2 ürün',
+                'Yeni müşteri tanımlandı: Atlas Otomasyon.')
+
+        # 5. Diyot lotunu geri çağır → müşteri ve depodaki paneller listelenmeli.
+        yanit = c.post(reverse('takip:lot_geri_cagir'), {'lot_no': 'L-D-EYLUL'}, follow=True)
+        self.ok(yanit, 'L-D-EYLUL geri çağrıldı',
+                '5 üründe kullanıldı', '1 müşteriye ulaştı', '3 ürün depoda',
+                'Atlas Otomasyon', 'sevkiyattan önce ayrılmalı')
+        for seri in ('SN-IP-0001', 'SN-IP-0002'):
+            self.assertContains(yanit, f'{seri}</span>\n          <span class="not">'
+                                       'İndikatör Paneli · 2 adet kullanıldı')
+        self.assertEqual(yanit.content.decode().count('rozet rozet--uyari">Satıldı'), 2)
+        self.assertEqual(yanit.content.decode().count('rozet rozet--basari">Depoda'), 3)
+        # Ana sayfadan aramak da aynı sonuca götürür; depodaki panel satışa eklenirse uyarı verir.
+        self.assertRedirects(c.get(reverse('takip:ana_sayfa'), {'q': 'l-d-eylul'}),
+                             f"{reverse('takip:izlenebilirlik')}?lot=L-D-EYLUL")
+        self.ok(c.post(satis_url, {'musteri': 'Beta', 'tarih': '2026-10-04',
+                                   'yeni_seri': 'SN-IP-0003', 'islem': 'ekle'}),
+                'Geri çağrılan lot içeriyor (L-D-EYLUL)')
+
+        # 6. Yeni üretim → geri çağrılan lot atlanmalı.
+        # Eski lotta 5 diyot kaldığı halde kullanılmaz; atlandığı da yazılır.
+        self.ok(c.get(uretim_url, {'urun': urun.pk, 'adet': 2}),
+                'L-D-EKIM × 4', 'SN-IP-0006 … SN-IP-0007',
+                'L-D-EYLUL</span>) otomatik olarak atlanır')
+        c.post(uretim_url, {'urun': urun.pk, 'adet': 2})
+        yeni = Uretim.objects.get(seri_no='SN-IP-0006')
+        self.assertEqual(
+            list(yeni.tuketimler.filter(stok_lotu__parca__kod='1N4001')
+                 .values_list('stok_lotu__lot_no', 'adet')),
+            [('L-D-EKIM', 2)],
+        )
+        self.assertEqual(StokLotu.objects.get(lot_no='L-D-EKIM').kalan_adet, 26)
+        self.assertEqual(StokLotu.objects.get(lot_no='L-D-EYLUL').kalan_adet, 5)
+        self.ok(c.get(reverse('takip:izlenebilirlik'), {'seri': 'SN-IP-0006'}), 'L-D-EKIM')
+        self.assertNotContains(c.get(reverse('takip:izlenebilirlik'), {'seri': 'SN-IP-0006'}),
+                               'geri çağrılan')
+
+
+class SenaryodaBulunanHatalarTest(TemelVeri):
+    """Adım 8 tarayıcı denemesinde bulunan hatalar."""
+
+    def yeni_satir(self, deger):
+        from .forms import YeniAgacSatiriForm
+        form = YeniAgacSatiriForm({'yeni_parca': deger, 'yeni_adet': 1})
+        return form.is_valid(), form.cleaned_data.get('yeni_parca'), form.errors
+
+    def test_urun_agacina_parca_adiyla_eklenebilir(self):
+        # Kutu "Parça adı veya kodu ile ekle…" diyor; önceden yalnız kod çalışıyordu.
+        Parca.objects.create(kod='PCB-IP', ad='Elektronik kart (PCB)')
+        self.assertEqual(self.yeni_satir('diyot')[1], self.diyot)        # ad, birebir
+        self.assertEqual(self.yeni_satir('led')[1], self.led)            # kod, birebir
+        self.assertEqual(self.yeni_satir('pcb')[1].kod, 'PCB-IP')        # tek kısmi eşleşme
+        self.assertEqual(self.yeni_satir('DIY – Diyot')[1], self.diyot)  # öneri listesi biçimi
+        Parca.objects.create(kod='PCB-RK', ad='Röle kartı PCB')
+        gecerli, _, hatalar = self.yeni_satir('pcb')
+        self.assertFalse(gecerli)
+        self.assertIn('birden fazla parçayla eşleşti: PCB-IP, PCB-RK', str(hatalar))
+        self.assertIn('bulunamadı', str(self.yeni_satir('yok-boyle')[2]))
+
+    def test_nokta_ile_biten_adda_cift_nokta_olmaz(self):
+        yanit = self.client.post(reverse('takip:stok'), {
+            'parca': self.led.pk, 'tedarikci': 'Elektro A.Ş.', 'lot_no': 'L-YENI',
+            'adet': 5, 'siparis_tarihi': '2026-09-01',
+        }, follow=True)
+        self.assertContains(yanit, 'Yeni tedarikçi tanımlandı: Elektro A.Ş.<')
+        self.assertNotContains(yanit, 'A.Ş..')
