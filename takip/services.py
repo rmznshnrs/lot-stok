@@ -10,7 +10,9 @@ from django.db.models import BooleanField, Count, ExpressionWrapper, F, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from .models import Parca, Satis, SatisKalemi, StokLotu, Uretim, UretimTuketim
+from .models import (
+    Parca, Satis, SatisKalemi, StokLotu, Tedarikci, Uretim, UretimTuketim,
+)
 
 
 class YetersizStok(Exception):
@@ -50,6 +52,73 @@ def parca_stoklari(queryset=None):
     )
 
 
+def mal_girisi(parca, tedarikci_adi, lot_no, adet, siparis_tarihi, siparis_no=''):
+    """Yeni stok lotu oluşturur; tedarikçi adı yoksa tedarikçiyi de oluşturur.
+
+    (lot, tedarikci_yeni_mi) döndürür. Lot no zaten varsa ValueError.
+    """
+    lot_no = lot_no.strip()
+    if adet < 1:
+        raise ValueError('Adet en az 1 olmalı.')
+    if StokLotu.objects.filter(lot_no__iexact=lot_no).exists():
+        raise ValueError(f'{lot_no} lot numarası zaten kayıtlı.')
+    tedarikci_adi = ' '.join(tedarikci_adi.split())
+    if not lot_no or not tedarikci_adi:
+        raise ValueError('Lot no ve tedarikçi boş olamaz.')
+    tedarikci =Tedarikci.objects.filter(ad__iexact=tedarikci_adi).first()
+    yeni = tedarikci is None
+    with transaction.atomic():
+        if yeni:
+            tedarikci = Tedarikci.objects.create(ad=tedarikci_adi)
+        lot = StokLotu.objects.create(
+            parca=parca, tedarikci=tedarikci, lot_no=lot_no, giris_adet=adet,
+            siparis_tarihi=siparis_tarihi, siparis_no=siparis_no.strip(),
+        )
+    return lot, yeni
+
+
+def stok_durumu(q='', parca_kod='', bitenler=False):
+    """Stok ekranı için parça bazında gruplanmış lot listesi.
+
+    Her öğe: parca (parca_stoklari alanlarıyla), lotlar (FIFO sırasıyla; her lotta
+    `sirada` = üretimde ilk kullanılacak lot mu) ve siradaki lot.
+    q parça kodu/adı ya da lot no'da arar; parça eşleşirse tüm lotları, yalnız lot
+    eşleşirse eşleşen lotları gösterir. bitenler=False ise kalanı 0 olan lotlar gizlenir.
+    """
+    parcalar = parca_stoklari().order_by('kod')
+    if parca_kod:
+        parcalar = parcalar.filter(kod__iexact=parca_kod)
+    lot_qs = StokLotu.objects.select_related('tedarikci').order_by('siparis_tarihi', 'id')
+
+    lot_eslesen = set()
+    if q:
+        lot_eslesen = set(
+            lot_qs.filter(lot_no__icontains=q).values_list('parca_id', flat=True)
+        )
+        parca_eslesen = Q(kod__icontains=q) | Q(ad__icontains=q)
+        parcalar = parcalar.filter(parca_eslesen | Q(pk__in=lot_eslesen))
+        parca_eslesen_idler = set(
+            Parca.objects.filter(parca_eslesen).values_list('pk', flat=True)
+        )
+    parcalar = list(parcalar)
+
+    lotlar = {}
+    for lot in lot_qs.filter(parca__in=parcalar):
+        lotlar.setdefault(lot.parca_id, []).append(lot)
+
+    sonuc = []
+    for parca in parcalar:
+        tum = lotlar.get(parca.pk, [])
+        siradaki = next((l for l in tum if not l.geri_cagrildi and l.kalan_adet > 0), None)
+        gosterilen = [l for l in tum if bitenler or l.kalan_adet > 0]
+        if q and parca.pk not in parca_eslesen_idler:
+            gosterilen = [l for l in gosterilen if q.lower() in l.lot_no.lower()]
+        for lot in gosterilen:
+            lot.sirada = lot is siradaki
+        sonuc.append({'parca': parca, 'lotlar': gosterilen, 'siradaki': siradaki})
+    return sonuc
+
+
 # --- Üretim önizleme ---------------------------------------------------------
 
 @dataclass
@@ -65,6 +134,7 @@ class ParcaIhtiyaci:
     gereken: int             # birim_adet × üretim adedi
     kullanilabilir: int      # geri çağrılmamış lotlardaki toplam kalan
     lotlar: list = field(default_factory=list)  # FIFO sırasıyla LotDusumu
+    atlanan_lotlar: list = field(default_factory=list)  # kalanı olan geri çağrılan lotlar
 
     @property
     def eksik(self):
@@ -76,6 +146,7 @@ class UretimOnizleme:
     urun: object
     adet: int
     parcalar: list           # ParcaIhtiyaci listesi
+    seri_nolar: list = field(default_factory=list)  # verilecek seri numaraları
 
     @property
     def eksikler(self):
@@ -116,13 +187,22 @@ def _onizle(urun, adet, kilitle=False):
             dusulen = min(kalan, lot.kalan_adet)
             ihtiyac.lotlar.append(LotDusumu(lot, dusulen))
             kalan -= dusulen
+        if not kilitle:
+            ihtiyac.atlanan_lotlar = list(
+                StokLotu.objects.filter(
+                    parca=satir.parca, geri_cagrildi=True, kalan_adet__gt=0
+                ).order_by('siparis_tarihi', 'id')
+            )
         parcalar.append(ihtiyac)
     return UretimOnizleme(urun=urun, adet=adet, parcalar=parcalar)
 
 
 def uretim_onizle(urun, adet):
-    """Kaydetmeden: her parça için hangi lottan kaç adet düşüleceğini ve eksikleri döndürür."""
-    return _onizle(urun, adet)
+    """Kaydetmeden: her parça için hangi lottan kaç adet düşüleceğini, eksikleri,
+    atlanacak geri çağrılmış lotları ve verilecek seri numaralarını döndürür."""
+    onizleme = _onizle(urun, adet)
+    onizleme.seri_nolar = sonraki_seri_nolar(urun, adet)
+    return onizleme
 
 
 # --- Üretim ------------------------------------------------------------------
@@ -139,6 +219,12 @@ def _sonraki_sira(urun):
     return sira + 1
 
 
+def sonraki_seri_nolar(urun, adet):
+    """Şimdi üretilirse verilecek ardışık seri numaraları."""
+    sira = _sonraki_sira(urun)
+    return [f'{urun.seri_oneki}{sira + i:04d}' for i in range(adet)]
+
+
 @transaction.atomic
 def uretim_yap(urun, adet, tarih=None):
     """N adet ürün üretir: N Uretim kaydı, ardışık seri no, FIFO lot düşümü.
@@ -151,14 +237,14 @@ def uretim_yap(urun, adet, tarih=None):
         raise YetersizStok(onizleme.eksikler)
 
     tarih = tarih or timezone.now()
-    sira = _sonraki_sira(urun)
+    seri_nolar = sonraki_seri_nolar(urun, adet)
     # Her parça için FIFO sırasıyla lot listesi; ürünler tek tek bu listeden tüketir.
     lot_kuyruklari = {p.parca.pk: [d.lot for d in p.lotlar] for p in onizleme.parcalar}
 
     uretimler = []
     for i in range(adet):
         uretim = Uretim.objects.create(
-            urun=urun, seri_no=f'{urun.seri_oneki}{sira + i:04d}', tarih=tarih
+            urun=urun, seri_no=seri_nolar[i], tarih=tarih
         )
         for ihtiyac in onizleme.parcalar:
             kuyruk = lot_kuyruklari[ihtiyac.parca.pk]

@@ -1,7 +1,8 @@
 from django import forms
 from django.forms import inlineformset_factory
+from django.utils import timezone
 
-from .models import Parca, Urun, UrunAgaci
+from .models import Parca, StokLotu, Urun, UrunAgaci
 
 
 class ParcaForm(forms.ModelForm):
@@ -98,3 +99,52 @@ class YeniAgacSatiriForm(forms.Form):
         if adet and not parca and 'yeni_parca' not in self.errors:
             self.add_error('yeni_parca', 'Parça seçin.')
         return temiz
+
+
+class ParcaSecimAlani(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return f'{obj.kod} – {obj.ad}'
+
+
+class MalGirisiForm(forms.Form):
+    parca = ParcaSecimAlani(
+        Parca.objects.order_by('kod'), label='Parça', empty_label='Parça seçin',
+        widget=forms.Select(attrs={'class': 'girdi'}),
+    )
+    tedarikci = forms.CharField(
+        label='Tedarikçi (nereden)', max_length=200,
+        widget=forms.TextInput(attrs={'class': 'girdi', 'list': 'tedarikci-listesi',
+                                      'placeholder': 'Tedarikçi seçin veya yazın',
+                                      'autocomplete': 'off'}),
+    )
+    lot_no = forms.CharField(
+        label='Lot numarası', max_length=100,
+        widget=forms.TextInput(attrs={'class': 'girdi girdi--mono', 'placeholder': 'L-…'}),
+    )
+    adet = forms.IntegerField(
+        label='Adet', min_value=1,
+        widget=forms.NumberInput(attrs={'class': 'girdi', 'min': 1}),
+    )
+    siparis_tarihi = forms.DateField(
+        label='Sipariş tarihi', initial=timezone.localdate,
+        widget=forms.DateInput(attrs={'class': 'girdi', 'type': 'date'}, format='%Y-%m-%d'),
+    )
+    siparis_no = forms.CharField(
+        label='Sipariş / irsaliye no', max_length=100, required=False,
+        widget=forms.TextInput(attrs={'class': 'girdi', 'placeholder': 'örn. SP-1050'}),
+    )
+
+    def clean_lot_no(self):
+        lot_no = self.cleaned_data['lot_no'].strip()
+        if StokLotu.objects.filter(lot_no__iexact=lot_no).exists():
+            raise forms.ValidationError('Bu lot numarası zaten kayıtlı.')
+        return lot_no
+
+
+class UretimForm(forms.Form):
+    urun = forms.ModelChoiceField(Urun.objects.all(), widget=forms.HiddenInput())
+    adet = forms.IntegerField(
+        min_value=1, max_value=999, initial=1,
+        widget=forms.NumberInput(attrs={'class': 'girdi girdi--adet-buyuk', 'min': 1,
+                                        'max': 999, 'aria-label': 'Adet'}),
+    )

@@ -425,3 +425,162 @@ class UrunlerEkraniTest(TemelVeri):
         self.client.post(self.url, self.post_verisi(seri_oneki='YENI-', ad='Panel v2'))
         self.urun.refresh_from_db()
         self.assertEqual((self.urun.ad, self.urun.seri_oneki), ('Panel v2', 'SN-IP-'))
+
+
+class MalGirisiTest(TemelVeri):
+    def test_lot_olusur_kalan_giris_adedine_esit(self):
+        lot, yeni = services.mal_girisi(self.diyot, 'Tedarikçi A', ' L-YENI ', 40,
+                                        date(2026, 9, 1), 'SP-9')
+        self.assertFalse(yeni)
+        self.assertEqual((lot.lot_no, lot.giris_adet, lot.kalan_adet, lot.tedarikci),
+                         ('L-YENI', 40, 40, self.ted))
+
+    def test_yeni_tedarikci_olusur(self):
+        lot, yeni = services.mal_girisi(self.diyot, '  Yeni   Firma ', 'L-X', 1, date(2026, 9, 1))
+        self.assertTrue(yeni)
+        self.assertEqual(lot.tedarikci.ad, 'Yeni Firma')
+        _, yeni = services.mal_girisi(self.diyot, 'yeni firma', 'L-Y', 1, date(2026, 9, 1))
+        self.assertFalse(yeni)
+
+    def test_hatalar(self):
+        for args in (('L-LED', 1), ('l-led', 1), ('L-Z', 0), ('', 1)):
+            with self.subTest(args=args), self.assertRaises(ValueError):
+                services.mal_girisi(self.led, 'Tedarikçi A', args[0], args[1], date(2026, 9, 1))
+        self.assertEqual(StokLotu.objects.count(), 4)
+
+
+class StokDurumuTest(TemelVeri):
+    def gruplar(self, **kw):
+        return {g['parca'].kod: g for g in services.stok_durumu(**kw)}
+
+    def test_fifo_sirasi_ve_siradaki_lot(self):
+        g = self.gruplar()['DIY']
+        self.assertEqual([l.lot_no for l in g['lotlar']], ['L-D-GERI', 'L-D-ESKI', 'L-D-YENI'])
+        self.assertEqual(g['siradaki'], self.diyot_eski)  # geri çağrılan sıradaki olmaz
+        self.assertEqual([l.sirada for l in g['lotlar']], [False, True, False])
+        self.assertEqual((g['parca'].toplam_stok, g['parca'].kullanilabilir_stok), (63, 13))
+
+    def test_biten_lotlar_gizlenir(self):
+        services.uretim_yap(self.urun, 3)  # L-D-ESKI biter
+        self.assertEqual([l.lot_no for l in self.gruplar()['DIY']['lotlar']],
+                         ['L-D-GERI', 'L-D-YENI'])
+        self.assertEqual(self.gruplar()['DIY']['siradaki'], self.diyot_yeni)
+        self.assertEqual(len(self.gruplar(bitenler=True)['DIY']['lotlar']), 3)
+
+    def test_arama(self):
+        self.assertEqual(list(self.gruplar(q='diyot')), ['DIY'])
+        self.assertEqual(len(self.gruplar(q='diyot')['DIY']['lotlar']), 3)
+        # Yalnız lot eşleşirse yalnız o lot gösterilir.
+        g = self.gruplar(q='eski')
+        self.assertEqual(list(g), ['DIY'])
+        self.assertEqual([l.lot_no for l in g['DIY']['lotlar']], ['L-D-ESKI'])
+        self.assertEqual(self.gruplar(q='yok-boyle-bir-sey'), {})
+
+    def test_parca_filtresi(self):
+        self.assertEqual(list(self.gruplar(parca_kod='led')), ['LED'])
+
+
+class StokEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:stok')
+
+    def test_lot_bazinda(self):
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'L-D-ESKI</a> <span class="lot-etiket">· sıradaki</span>')
+        self.assertContains(yanit, '· geri çağrıldı')
+        self.assertContains(yanit, 'Toplam: 63')
+        self.assertContains(yanit, 'kullanılabilir: 13')
+        self.assertContains(yanit, 'sekme sekme--aktif" aria-current="page">Lot bazında')
+        self.assertNotContains(yanit, '[')
+
+    def test_parca_bazinda(self):
+        yanit = self.client.get(self.url, {'gorunum': 'parca'})
+        self.assertContains(yanit, 'sekme sekme--aktif" aria-current="page">Parça bazında')
+        self.assertContains(yanit, 'L-D-ESKI <span class="lot-etiket">· 3 kaldı</span>')
+
+    def test_parca_linki_formu_doldurur(self):
+        yanit = self.client.get(self.url, {'parca': 'DIY'})
+        self.assertEqual(yanit.context['form'].initial['parca'], self.diyot)
+        self.assertEqual(len(yanit.context['gruplar']), 1)
+
+    def test_mal_girisi_kaydet(self):
+        yanit = self.client.post(self.url, {
+            'parca': self.led.pk, 'tedarikci': 'Yeni Firma', 'lot_no': 'L-LED-2',
+            'adet': 25, 'siparis_tarihi': '2026-09-15', 'siparis_no': 'SP-77',
+        }, follow=True)
+        lot = StokLotu.objects.get(lot_no='L-LED-2')
+        self.assertEqual((lot.kalan_adet, lot.siparis_tarihi, lot.tedarikci.ad),
+                         (25, date(2026, 9, 15), 'Yeni Firma'))
+        self.assertContains(yanit, 'L-LED-2 stoğa eklendi')
+        self.assertContains(yanit, 'Yeni tedarikçi tanımlandı')
+
+    def test_mal_girisi_hatalari(self):
+        yanit = self.client.post(self.url, {
+            'parca': self.led.pk, 'tedarikci': 'X', 'lot_no': 'l-led', 'adet': 0,
+            'siparis_tarihi': '2026-09-15',
+        })
+        self.assertEqual(yanit.status_code, 200)
+        self.assertContains(yanit, 'Bu lot numarası zaten kayıtlı.')
+        self.assertEqual(StokLotu.objects.count(), 4)
+
+
+class UretimOnizlemeEkTest(TemelVeri):
+    def test_seri_nolar_ve_atlanan_lotlar(self):
+        o = services.uretim_onizle(self.urun, 3)
+        self.assertEqual(o.seri_nolar, ['SN-IP-0001', 'SN-IP-0002', 'SN-IP-0003'])
+        diyot = next(p for p in o.parcalar if p.parca == self.diyot)
+        self.assertEqual(diyot.atlanan_lotlar, [self.diyot_geri])
+        services.uretim_yap(self.urun, 1)
+        self.assertEqual(services.sonraki_seri_nolar(self.urun, 1), ['SN-IP-0002'])
+
+
+class UretimEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:uretim')
+
+    def test_onizleme_yeterli(self):
+        yanit = self.client.get(self.url, {'urun': self.urun.pk, 'adet': 5})
+        self.assertContains(yanit, 'L-D-ESKI × 3 · L-D-YENI × 2')
+        self.assertContains(yanit, 'SN-IP-0001 … SN-IP-0005')
+        self.assertContains(yanit, 'L-D-GERI</span>) otomatik olarak atlanır')
+        self.assertNotContains(yanit, 'Eksik parça var')
+        self.assertContains(yanit, '<button type="submit" class="btn">Üretimi kaydet')
+        html = yanit.content.decode().split('<script>')[0]
+        self.assertNotIn('[', html)  # yer tutucu kalmamalı
+
+    def test_onizleme_eksik_buton_pasif(self):
+        yanit = self.client.get(self.url, {'urun': self.urun.pk, 'adet': 14})
+        self.assertContains(yanit, '1 adet eksik')
+        self.assertContains(yanit, 'Eksik parça var')
+        self.assertContains(yanit, 'class="btn" disabled')
+
+    def test_varsayilanlar_ve_gecersiz_adet(self):
+        yanit = self.client.get(self.url)
+        self.assertEqual((yanit.context['urun'], yanit.context['adet']), (self.urun, 1))
+        self.assertEqual(self.client.get(self.url, {'adet': 'abc'}).context['adet'], 1)
+        self.assertEqual(self.client.get(self.url, {'adet': '5000'}).context['adet'], 999)
+
+    def test_bos_agac(self):
+        bos = Urun.objects.create(kod='BOS', ad='Boş', seri_oneki='SN-B-')
+        yanit = self.client.get(self.url, {'urun': bos.pk})
+        self.assertContains(yanit, 'ürün ağacı boş')
+
+    def test_kaydet_ve_seri_numaralarini_goster(self):
+        yanit = self.client.post(self.url, {'urun': self.urun.pk, 'adet': 2})
+        self.assertRedirects(yanit, f'{self.url}?urun={self.urun.pk}&adet=2',
+                             fetch_redirect_response=False)
+        self.assertEqual(Uretim.objects.count(), 2)
+        sayfa = self.client.get(yanit.url)
+        self.assertContains(sayfa, 'Üretim kaydedildi: 2 adet İndikatör Paneli')
+        self.assertContains(sayfa, '>SN-IP-0001</a>')
+        self.assertContains(sayfa, '>SN-IP-0002</a>')
+        self.assertContains(sayfa, 'SN-IP-0003 … SN-IP-0004')  # sıradaki önizleme
+        # Sonuç kutusu yalnız bir kez gösterilir.
+        self.assertNotContains(self.client.get(yanit.url), 'Üretim kaydedildi')
+
+    def test_yetersiz_stokta_kaydetmez(self):
+        yanit = self.client.post(self.url, {'urun': self.urun.pk, 'adet': 14}, follow=True)
+        self.assertContains(yanit, 'Stok yetersiz, üretim kaydedilmedi: DIY (1 eksik)')
+        self.assertEqual(Uretim.objects.count(), 0)
+
+    def test_gecersiz_post(self):
+        self.client.post(self.url, {'urun': self.urun.pk, 'adet': 0})
+        self.assertEqual(Uretim.objects.count(), 0)

@@ -1,0 +1,136 @@
+{% extends 'takip/base.html' %}
+{% block baslik %}Stok{% endblock %}
+{% block icerik %}
+<section class="kart kart--form kart--form-genis">
+  <h2>Mal girişi</h2>
+  <form method="post" class="form-dikey" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+    {% for alan in form %}
+      {% if alan.name == 'adet' %}<div class="izgara-2">{% endif %}
+      <div class="alan">
+        <label for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+        {{ alan }}
+        {% for e in alan.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+      {% if alan.name == 'siparis_tarihi' %}</div>{% endif %}
+    {% endfor %}
+    <datalist id="tedarikci-listesi">
+      {% for t in tedarikciler %}<option value="{{ t.ad }}">{% endfor %}
+    </datalist>
+    <div class="not">Listede olmayan bir tedarikçi yazarsanız yeni tedarikçi olarak tanımlanır.</div>
+    <button type="submit" class="btn btn--tam">Stoğa ekle</button>
+  </form>
+</section>
+
+<section class="kart kart--genis">
+  <div class="bas-satir">
+    <div class="bas-satir-sol">
+      <h2>Stok durumu</h2>
+      <nav class="sekmeler" aria-label="Görünüm">
+        <a href="{{ parca_url }}" class="sekme{% if gorunum == 'parca' %} sekme--aktif{% endif %}"{% if gorunum == 'parca' %} aria-current="page"{% endif %}>Parça bazında</a>
+        <a href="{{ lot_url }}" class="sekme{% if gorunum == 'lot' %} sekme--aktif{% endif %}"{% if gorunum == 'lot' %} aria-current="page"{% endif %}>Lot bazında</a>
+      </nav>
+    </div>
+    <form method="get" role="search" class="arama-satiri">
+      <input type="hidden" name="gorunum" value="{{ gorunum }}">
+      {% if gorunum == 'lot' %}
+      <label class="onay-etiket"><input type="checkbox" name="bitenler" value="1"{% if bitenler %} checked{% endif %} onchange="this.form.submit()"> Biten lotlar da</label>
+      {% endif %}
+      <input type="search" name="q" value="{{ q }}" class="girdi girdi--ara" aria-label="Stokta ara" placeholder="Parça veya lot ara…">
+    </form>
+  </div>
+  {% if parca_kod %}
+  <div class="filtre">Yalnızca <span class="mono">{{ parca_kod }}</span> gösteriliyor · <a href="{% url 'takip:stok' %}?gorunum={{ gorunum }}">tümünü göster</a></div>
+  {% endif %}
+
+  <div class="tablo-kap">
+  {% if gorunum == 'lot' %}
+  <table class="tablo">
+    <thead>
+      <tr>
+        <th>Parça</th>
+        <th>Lot No</th>
+        <th>Tedarikçi</th>
+        <th>Sipariş tarihi</th>
+        <th class="sag">Gelen</th>
+        <th class="sag">Kalan</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in gruplar %}
+      {% with p=g.parca %}
+      {% for lot in g.lotlar %}
+      <tr{% if lot.geri_cagrildi %} class="uyari-satir"{% endif %}>
+        {% if forloop.first %}
+        <td class="parca-hucre" rowspan="{{ g.lotlar|length }}">
+          <div class="parca-ad">{{ p.ad }}</div>
+          <div class="mono yardim">{{ p.kod }}</div>
+          <div class="parca-toplam{% if p.min_altinda %} parca-toplam--az{% endif %}">Toplam: {{ p.toplam_stok }}</div>
+          <div class="yardim{% if p.min_altinda %} uyari-metin{% endif %}">kullanılabilir: {{ p.kullanilabilir_stok }}{% if p.min_altinda %} · min {{ p.min_stok }} altında{% endif %}</div>
+        </td>
+        {% endif %}
+        <td class="mono">
+          {% if lot.geri_cagrildi %}
+          <a href="{% url 'takip:izlenebilirlik' %}?lot={{ lot.lot_no|urlencode }}" class="uyari-metin">{{ lot.lot_no }}</a> <span class="lot-etiket lot-etiket--uyari">· geri çağrıldı</span>
+          {% else %}
+          <a href="{% url 'takip:izlenebilirlik' %}?lot={{ lot.lot_no|urlencode }}" class="lot-baglanti">{{ lot.lot_no }}</a>{% if lot.sirada %} <span class="lot-etiket">· sıradaki</span>{% endif %}{% if not lot.kalan_adet %} <span class="lot-etiket lot-etiket--soluk">· bitti</span>{% endif %}
+          {% endif %}
+        </td>
+        <td>{{ lot.tedarikci.ad }}</td>
+        <td>{{ lot.siparis_tarihi|date:"d.m.Y" }}</td>
+        <td class="sag">{{ lot.giris_adet }}</td>
+        <td class="sag{% if p.min_altinda and not lot.geri_cagrildi %} uyari-metin{% elif not lot.kalan_adet %} soluk{% endif %}">{{ lot.kalan_adet }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td class="parca-hucre">
+          <div class="parca-ad">{{ p.ad }}</div>
+          <div class="mono yardim">{{ p.kod }}</div>
+          <div class="parca-toplam{% if p.min_altinda %} parca-toplam--az{% endif %}">Toplam: {{ p.toplam_stok }}</div>
+        </td>
+        <td colspan="5" class="soluk">{% if q %}Aramayla eşleşen lot yok.{% else %}Stokta lot yok.{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% endwith %}
+      {% empty %}
+      <tr class="bos"><td colspan="6">{% if q %}“{{ q }}” için sonuç bulunamadı.{% else %}Henüz parça tanımlanmadı.{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <table class="tablo">
+    <thead>
+      <tr>
+        <th>Kod</th>
+        <th>Parça</th>
+        <th class="sag">Toplam</th>
+        <th class="sag">Kullanılabilir</th>
+        <th class="sag">Min stok</th>
+        <th class="sag">Lot sayısı</th>
+        <th>Sıradaki lot</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in gruplar %}
+      {% with p=g.parca %}
+      <tr{% if p.min_altinda %} class="uyari-satir"{% endif %}>
+        <td class="mono">{{ p.kod }}</td>
+        <td><a href="?{% if q %}q={{ q|urlencode }}&amp;{% endif %}parca={{ p.kod|urlencode }}&amp;gorunum=lot">{{ p.ad }}</a></td>
+        <td class="sag">{{ p.toplam_stok }}</td>
+        <td class="sag{% if p.min_altinda %} uyari-metin{% endif %}">{{ p.kullanilabilir_stok }}{% if p.min_altinda %} · min altında{% endif %}</td>
+        <td class="sag soluk">{{ p.min_stok }}</td>
+        <td class="sag">{{ p.lot_sayisi }}</td>
+        <td class="mono">{% if g.siradaki %}{{ g.siradaki.lot_no }} <span class="lot-etiket">· {{ g.siradaki.kalan_adet }} kaldı</span>{% else %}<span class="soluk">—</span>{% endif %}</td>
+      </tr>
+      {% endwith %}
+      {% empty %}
+      <tr class="bos"><td colspan="7">{% if q %}“{{ q }}” için sonuç bulunamadı.{% else %}Henüz parça tanımlanmadı.{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  </div>
+  <div class="not alt-not">Toplam = tüm lotların kalanı. Kullanılabilir = geri çağrılan lotlar hariç. "Sıradaki" etiketi üretimde ilk kullanılacak lotu gösterir.</div>
+</section>
+{% endblock %}

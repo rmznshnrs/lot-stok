@@ -320,3 +320,117 @@ form { margin: 0; }
 .tablo tr:has(.btn-kaldir :checked) td { opacity: 0.45; text-decoration: line-through; }
 .tablo tr:has(.btn-kaldir :checked) td:last-child { opacity: 1; text-decoration: none; }
 .tablo tr:has(.btn-kaldir :checked) .btn-kaldir { background: var(--uyari-zemin); color: var(--uyari); }
+
+/* --- Stok ---------------------------------------------------------------- */
+
+.kart--form-genis { width: 340px; }
+select.girdi { appearance: auto; padding-right: 8px; }
+
+.bas-satir-sol { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+.sekmeler { display: flex; gap: 4px; background: var(--sekme-zemin); border-radius: 8px; padding: 3px; }
+.sekme {
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--metin-ikincil);
+  font-size: 13px;
+  text-decoration: none;
+}
+.sekme:hover { color: var(--metin); }
+.sekme--aktif { background: var(--kart); color: var(--metin); font-weight: 600; }
+
+.arama-satiri { display: flex; align-items: center; gap: 12px; }
+.onay-etiket { font-size: 13px; color: var(--soluk); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.filtre { font-size: 13px; color: var(--soluk); }
+
+.tablo td.parca-hucre { vertical-align: top; background: var(--kart); }
+.tablo tbody tr:has(+ tr) td.parca-hucre { border-bottom: 1px solid var(--kenar-ince); }
+.parca-ad { font-weight: 600; }
+.parca-toplam { margin-top: 4px; font-size: 13px; color: var(--ana); font-weight: 600; }
+.parca-toplam--az { color: var(--uyari); }
+
+.lot-baglanti { color: inherit; text-decoration: none; }
+.lot-baglanti:hover { color: var(--ana); text-decoration: underline; }
+.lot-etiket { font-family: var(--font); font-size: 11px; color: var(--ana); }
+.lot-etiket--uyari { color: var(--uyari); }
+.lot-etiket--soluk { color: var(--soluk); }
+
+.alt-not { margin-top: auto; }
+
+/* --- Üretim -------------------------------------------------------------- */
+
+.kart--liste-dar { width: 260px; }
+
+.adim-baslik {
+  font-size: 12px;
+  color: var(--soluk);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.adim-aciklama { text-transform: none; letter-spacing: 0; }
+.adim-grup { display: flex; flex-direction: column; gap: 4px; }
+.bas-satir--alt { align-items: flex-end; }
+
+.adet-secici { display: flex; align-items: center; gap: 8px; }
+.btn-adet {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  border: 1px solid var(--girdi-kenar);
+  background: var(--kart);
+  color: var(--metin);
+  font: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+.btn-adet:hover { background: var(--zemin); }
+.girdi--adet-buyuk { width: 80px; text-align: center; font-size: 18px; font-weight: 600; padding: 0 4px; }
+.adet-urun { font-size: 14px; color: var(--soluk); margin-left: 8px; }
+
+.durum-yeterli { color: var(--basari); font-weight: 500; }
+
+.seri-aralik { font-size: 14px; }
+.kaydet-grup { display: flex; align-items: center; gap: 12px; }
+.uyari-not { font-size: 13px; color: var(--uyari); }
+.btn:disabled, .btn:disabled:hover { background: #C9CDD3; color: var(--metin-ikincil); cursor: not-allowed; }
+
+.liste-ekle {
+  margin-top: auto;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px dashed var(--girdi-kenar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: var(--ana);
+  font-size: 14px;
+  font-weight: 500;
+}
+.liste-ekle:hover { background: var(--ana-acik); }
+
+.sonuc-kutu {
+  background: var(--basari-zemin);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sonuc-baslik { font-size: 14px; font-weight: 600; color: var(--basari); }
+.seri-listesi { display: flex; flex-wrap: wrap; gap: 6px; }
+.seri-cip {
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--kart);
+  color: var(--basari);
+  text-decoration: none;
+}
+.seri-cip:hover { color: var(--ana); }
+
+@media (max-width: 900px) {
+  .kart--form-genis, .kart--liste-dar { width: auto; }
+  .arama-satiri { flex-wrap: wrap; width: 100%; }
+}
