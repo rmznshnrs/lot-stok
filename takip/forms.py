@@ -148,3 +148,16 @@ class UretimForm(forms.Form):
         widget=forms.NumberInput(attrs={'class': 'girdi girdi--adet-buyuk', 'min': 1,
                                         'max': 999, 'aria-label': 'Adet'}),
     )
+
+
+class SatisForm(forms.Form):
+    musteri = forms.CharField(
+        label='Müşteri', max_length=200,
+        widget=forms.TextInput(attrs={'class': 'girdi', 'list': 'musteri-listesi',
+                                      'placeholder': 'Müşteri seçin veya yazın',
+                                      'autocomplete': 'off'}),
+    )
+    tarih = forms.DateField(
+        label='Satış tarihi', initial=timezone.localdate,
+        widget=forms.DateInput(attrs={'class': 'girdi', 'type': 'date'}, format='%Y-%m-%d'),
+    )

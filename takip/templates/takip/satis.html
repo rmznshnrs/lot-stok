@@ -1,0 +1,93 @@
+{% extends 'takip/base.html' %}
+{% block baslik %}Satış{% endblock %}
+{% block icerik %}
+<section class="kart kart--form kart--form-satis">
+  <h2>Yeni satış</h2>
+  <form method="post" class="form-dikey" novalidate>
+    {% csrf_token %}
+    <div class="alan">
+      <label for="{{ form.musteri.id_for_label }}">{{ form.musteri.label }}</label>
+      {{ form.musteri }}
+      {% if form_hatalari_goster %}{% for e in form.musteri.errors %}<span class="hata">{{ e }}</span>{% endfor %}{% endif %}
+    </div>
+    <datalist id="musteri-listesi">
+      {% for m in musteriler %}<option value="{{ m.ad }}">{% endfor %}
+    </datalist>
+    <div class="alan">
+      <label for="{{ form.tarih.id_for_label }}">{{ form.tarih.label }}</label>
+      {{ form.tarih }}
+      {% if form_hatalari_goster %}{% for e in form.tarih.errors %}<span class="hata">{{ e }}</span>{% endfor %}{% endif %}
+    </div>
+    <div class="alan">
+      <label for="yeni-seri">Satılan seri numaraları</label>
+      <div class="satir-ekle">
+        <input type="text" id="yeni-seri" name="yeni_seri" class="girdi girdi--esnek girdi--mono" placeholder="SN-…" autocomplete="off"{% if sepet %} autofocus{% endif %}>
+        <button type="submit" name="islem" value="ekle" class="btn btn--ikincil">Ekle</button>
+      </div>
+      <span class="yardim">Birden fazla seri no'yu boşluk veya virgülle ayırarak ekleyebilirsiniz.</span>
+      {% for e in seri_hatalari %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+
+    {% if sepet %}
+    <div class="sepet">
+      {% for k in sepet %}
+      <div class="sepet-oge{% if k.geri_lotlar %} sepet-oge--uyari{% endif %}">
+        <input type="hidden" name="seri" value="{{ k.uretim.seri_no }}">
+        <div class="baslik-grup">
+          <span class="mono akis-numara">{{ k.uretim.seri_no }}</span>
+          {% if k.geri_lotlar %}
+          <span class="yardim uyari-metin">Geri çağrılan lot içeriyor ({{ k.geri_lotlar|join:", " }}) — satışa uygun değil</span>
+          {% else %}
+          <span class="yardim">{{ k.uretim.urun.ad }}</span>
+          {% endif %}
+        </div>
+        <button type="submit" name="islem" value="kaldir:{{ k.uretim.seri_no }}" class="btn-kaldir" aria-label="{{ k.uretim.seri_no }} listeden kaldır" title="Kaldır">×</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% if uyari_var %}
+    <label class="onay-etiket onay-etiket--uyari"><input type="checkbox" name="onay" value="1"{% if onay %} checked{% endif %}> Geri çağrılan lot içeren ürünleri yine de sat</label>
+    {% endif %}
+    {% endif %}
+
+    <div class="toplam-satir"><span>Toplam</span><strong>{{ sepet|length }} ürün</strong></div>
+    <button type="submit" name="islem" value="kaydet" class="btn btn--tam-alt">Satışı kaydet</button>
+  </form>
+</section>
+
+<section class="kart kart--genis">
+  <div class="bas-satir">
+    <h2>Satış geçmişi</h2>
+    <form method="get" role="search">
+      <input type="search" name="q" value="{{ q }}" class="girdi girdi--ara" aria-label="Satışlarda ara" placeholder="Müşteri veya seri no ara…">
+    </form>
+  </div>
+  <div class="tablo-kap">
+  <table class="tablo">
+    <thead>
+      <tr>
+        <th>Tarih</th>
+        <th>Müşteri</th>
+        <th>Ürün</th>
+        <th>Seri No</th>
+        <th class="sag">Adet</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in gecmis %}
+      <tr>
+        <td>{{ s.satis.tarih|date:"d.m.Y" }}</td>
+        <td>{{ s.musteri.ad }}</td>
+        <td>{{ s.urun.ad }}</td>
+        <td class="mono">{% for seri in s.seri_nolar %}<a href="{% url 'takip:izlenebilirlik' %}?sekme=seri&amp;seri={{ seri|urlencode }}">{{ seri }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        <td class="sag">{{ s.seri_nolar|length }}</td>
+      </tr>
+      {% empty %}
+      <tr class="bos"><td colspan="5">{% if q %}“{{ q }}” için satış bulunamadı.{% else %}Henüz satış yok.{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="not alt-not">Seri numarasına tıklayınca o ürünün içindeki parçalar ve lotları açılır.</div>
+</section>
+{% endblock %}

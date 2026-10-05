@@ -1,0 +1,60 @@
+{% extends 'takip/base.html' %}
+{% block baslik %}Ana Sayfa{% endblock %}
+{% block icerik_sinifi %} icerik--dikey icerik--genis{% endblock %}
+{% block icerik %}
+<section class="arama-bolumu">
+  <h1>Bir lot veya seri numarasının izini sür</h1>
+  <form method="get" class="arama-buyuk" role="search">
+    <input type="search" name="q" value="{{ q }}" class="girdi girdi--buyuk" aria-label="Lot, seri no veya parça kodu" placeholder="Lot no, seri no veya parça kodu yazın — örn. L-D-2601 veya SN-IP-0001" autofocus>
+    <button type="submit" class="btn btn--buyuk">İzini sür</button>
+  </form>
+  {% if sonuc and sonuc.adaylar %}
+  <div class="aday-kutu">
+    <div class="not">“{{ q }}” birebir eşleşmedi. Şunlardan birini mi arıyordunuz?</div>
+    <div class="seri-listesi">
+      {% for tur, deger in sonuc.adaylar %}
+      <a href="{% url 'takip:izlenebilirlik' %}?{% if tur == 'lot' %}lot{% else %}sekme=seri&amp;seri{% endif %}={{ deger|urlencode }}" class="seri-cip seri-cip--mavi"><span class="cip-tur">{% if tur == 'lot' %}lot{% else %}seri{% endif %}</span> {{ deger }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% elif sonuc %}
+  <div class="mesaj mesaj--warning">“{{ q }}” ile eşleşen lot, seri no veya parça kodu bulunamadı.</div>
+  {% else %}
+  <div class="not">Sistem numaranın lot mu seri no mu olduğunu kendisi anlar ve ilgili zinciri gösterir.</div>
+  {% endif %}
+</section>
+
+<section class="hizli-kartlar">
+  <a href="{% url 'takip:stok' %}" class="hizli-kart">
+    <div class="hizli-no">1</div>
+    <div class="hizli-baslik">Mal girişi yap</div>
+    <div class="not not--buyuk">Gelen parçayı lot numarası, tedarikçi ve tarihiyle stoğa ekle</div>
+  </a>
+  <a href="{% url 'takip:uretim' %}" class="hizli-kart">
+    <div class="hizli-no">2</div>
+    <div class="hizli-baslik">Ürün üret</div>
+    <div class="not not--buyuk">Ürün seç, adet gir; parçalar ilk gelen lottan düşülür, seri no verilir</div>
+  </a>
+  <a href="{% url 'takip:satis' %}" class="hizli-kart">
+    <div class="hizli-no">3</div>
+    <div class="hizli-baslik">Satış kaydet</div>
+    <div class="not not--buyuk">Satılan seri numaralarını müşteriye ve tarihe bağla</div>
+  </a>
+</section>
+
+<section class="kart kart--genis kart--hareketler">
+  <h3>Son hareketler</h3>
+  {% for h in hareketler %}
+  <div class="hareket">
+    <span class="hareket-tarih">{{ h.tarih|date:"d.m.Y" }}</span>
+    {% if h.tur == 'giris' %}<span class="hareket-rozet rozet--mavi">Giriş</span>
+    {% elif h.tur == 'uretim' %}<span class="hareket-rozet rozet--basari">Üretim</span>
+    {% else %}<span class="hareket-rozet rozet--uyari">Satış</span>{% endif %}
+    <span class="hareket-aciklama">{{ h.aciklama }}</span>
+    <a class="mono hareket-numara" href="{% url 'takip:izlenebilirlik' %}?{% if h.numara_turu == 'lot' %}lot{% else %}sekme=seri&amp;seri{% endif %}={{ h.numara_ilk|urlencode }}">{{ h.numara }}</a>
+  </div>
+  {% empty %}
+  <p class="not">Henüz hareket yok. Parça tanımlayıp mal girişi yaparak başlayın.</p>
+  {% endfor %}
+</section>
+{% endblock %}

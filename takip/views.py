@@ -1,43 +1,198 @@
+import re
+
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.http import urlencode
+from django.views.decorators.http import require_POST
 
 from .forms import (
     MalGirisiForm,
+    SatisForm,
     ParcaForm,
     UretimForm,
     UrunAgaciFormSet,
     UrunForm,
     YeniAgacSatiriForm,
 )
-from .models import Parca, Tedarikci, Urun, UrunAgaci
+from .models import Musteri, Parca, StokLotu, Tedarikci, Urun, UrunAgaci
 from .services import (
+    SatisHatasi,
     YetersizStok,
+    lot_geri_cagir,
+    lot_izle,
     mal_girisi,
+    musteri_getir_veya_olustur,
+    numara_ara,
     parca_stoklari,
+    satilabilir_uretim,
+    satis_gecmisi,
+    satis_uyarilari,
+    satis_yap,
+    seri_izle,
+    son_hareketler,
     stok_durumu,
     uretim_onizle,
     uretim_yap,
 )
 
 
-def _hazirlaniyor(request, aktif, baslik):
-    return render(request, 'takip/hazirlaniyor.html', {'aktif': aktif, 'baslik': baslik})
-
+# --- Ana sayfa ---------------------------------------------------------------
 
 def ana_sayfa(request):
-    return _hazirlaniyor(request, 'ana_sayfa', 'Ana Sayfa')
+    q = request.GET.get('q', '').strip()
+    sonuc = None
+    if q:
+        sonuc = numara_ara(q)
+        if sonuc['tur'] == 'lot':
+            return redirect(f"{reverse('takip:izlenebilirlik')}?{urlencode({'lot': sonuc['deger']})}")
+        if sonuc['tur'] == 'seri':
+            return redirect(
+                f"{reverse('takip:izlenebilirlik')}?{urlencode({'sekme': 'seri', 'seri': sonuc['deger']})}"
+            )
+        if sonuc['tur'] == 'parca':
+            return redirect(f"{reverse('takip:stok')}?{urlencode({'parca': sonuc['deger']})}")
+    return render(request, 'takip/ana_sayfa.html', {
+        'aktif': 'ana_sayfa',
+        'q': q,
+        'sonuc': sonuc,
+        'hareketler': son_hareketler(),
+    })
 
+
+# --- İzlenebilirlik ----------------------------------------------------------
 
 def izlenebilirlik(request):
-    return _hazirlaniyor(request, 'izlenebilirlik', 'İzlenebilirlik')
+    lot_no = request.GET.get('lot', '').strip()
+    seri_no = request.GET.get('seri', '').strip()
+    sekme = request.GET.get('sekme')
+    if sekme not in ('lot', 'seri'):
+        sekme = 'seri' if seri_no and not lot_no else 'lot'
+
+    def sekme_url(s):
+        parametreler = {'sekme': s}
+        if lot_no:
+            parametreler['lot'] = lot_no
+        if seri_no:
+            parametreler['seri'] = seri_no
+        return f"{reverse('takip:izlenebilirlik')}?{urlencode(parametreler)}"
+
+    baglam = {
+        'aktif': 'izlenebilirlik',
+        'sekme': sekme,
+        'lot_no': lot_no,
+        'seri_no': seri_no,
+        'lot_sekme_url': sekme_url('lot'),
+        'seri_sekme_url': sekme_url('seri'),
+    }
+    # Bulunan kaydın asıl yazımını kullan (aramada büyük/küçük harf önemsiz).
+    if sekme == 'lot' and lot_no:
+        baglam['iz'] = iz = lot_izle(lot_no)
+        if iz:
+            baglam['lot_no'] = iz['lot'].lot_no
+    elif sekme == 'seri' and seri_no:
+        baglam['iz'] = iz = seri_izle(seri_no)
+        if iz:
+            baglam['seri_no'] = iz['uretim'].seri_no
+    return render(request, 'takip/izlenebilirlik.html', baglam)
+
+
+@require_POST
+def lot_geri_cagir_view(request):
+    lot_no = request.POST.get('lot_no', '')
+    geri_cagir = request.POST.get('islem') != 'kaldir'
+    try:
+        lot = lot_geri_cagir(lot_no, geri_cagir)
+    except StokLotu.DoesNotExist:
+        messages.error(request, f'{lot_no} lotu bulunamadı.')
+        return redirect('takip:izlenebilirlik')
+    if geri_cagir:
+        messages.warning(
+            request, f'{lot.lot_no} geri çağrıldı. Bu lot artık üretimde kullanılmayacak; '
+                     'aşağıda etkilenen ürünler ve müşteriler listeleniyor.'
+        )
+    else:
+        messages.success(request, f'{lot.lot_no} için geri çağırma kaldırıldı.')
+    return redirect(f"{reverse('takip:izlenebilirlik')}?{urlencode({'lot': lot.lot_no})}")
+
+
+# --- Satış -------------------------------------------------------------------
+
+def _seri_parcala(metin):
+    """Virgül, boşluk veya satır sonuyla ayrılmış seri numaraları (barkod okuyucu için)."""
+    return [p for p in re.split(r'[\s,;]+', metin) if p]
 
 
 def satis(request):
-    return _hazirlaniyor(request, 'satis', 'Satış')
+    q = request.GET.get('q', '').strip()
+    form = SatisForm(request.POST or None)
+    uretimler, seri_hatalari, onay = [], [], False
+
+    if request.method == 'POST':
+        islem = request.POST.get('islem', '')
+        onay = request.POST.get('onay') == '1'
+        kaldirilacak = islem[len('kaldir:'):] if islem.startswith('kaldir:') else None
+        eklenecek = request.POST.getlist('seri') + _seri_parcala(request.POST.get('yeni_seri', ''))
+        for seri in eklenecek:
+            if seri == kaldirilacak:
+                continue
+            if any(u.seri_no.lower() == seri.lower() for u in uretimler):
+                seri_hatalari.append(f'{seri} zaten listede.')
+                continue
+            try:
+                uretimler.append(satilabilir_uretim(seri))
+            except SatisHatasi as hata:
+                seri_hatalari.append(str(hata))
+
+        if islem == 'kaydet':
+            seriler = [u.seri_no for u in uretimler]
+            uyarilar = satis_uyarilari(seriler)
+            if not seriler and not seri_hatalari:
+                seri_hatalari.append('En az bir seri no ekleyin.')
+            if uyarilar and not onay:
+                seri_hatalari.append(
+                    'Listede geri çağrılan lot içeren ürün var. Yine de satmak için '
+                    'onay kutusunu işaretleyin veya bu ürünleri listeden çıkarın.'
+                )
+            if form.is_valid() and not seri_hatalari:
+                try:
+                    with transaction.atomic():
+                        musteri, yeni_musteri = musteri_getir_veya_olustur(
+                            form.cleaned_data['musteri']
+                        )
+                        sonuc = satis_yap(musteri, seriler, form.cleaned_data['tarih'])
+                except (SatisHatasi, ValueError) as hata:
+                    seri_hatalari.append(str(hata))
+                else:
+                    messages.success(
+                        request, f'Satış kaydedildi: {musteri.ad}, {len(seriler)} ürün '
+                                 f'({", ".join(seriler)}).'
+                    )
+                    if yeni_musteri:
+                        messages.info(request, f'Yeni müşteri tanımlandı: {musteri.ad}.')
+                    for u in sonuc.uyarilar:
+                        messages.warning(
+                            request, f'{u["seri_no"]} geri çağrılan lot içeriyor: '
+                                     f'{", ".join(u["lotlar"])}.'
+                        )
+                    return redirect('takip:satis')
+
+    uyarilar = {u['seri_no']: u['lotlar'] for u in satis_uyarilari([u.seri_no for u in uretimler])}
+    sepet = [{'uretim': u, 'geri_lotlar': uyarilar.get(u.seri_no, [])} for u in uretimler]
+    return render(request, 'takip/satis.html', {
+        'aktif': 'satis',
+        'form': form,
+        'form_hatalari_goster': request.POST.get('islem') == 'kaydet',
+        'sepet': sepet,
+        'uyari_var': bool(uyarilar),
+        'onay': onay,
+        'seri_hatalari': seri_hatalari,
+        'gecmis': satis_gecmisi(q),
+        'q': q,
+        'musteriler': Musteri.objects.order_by('ad'),
+    })
 
 
 # --- Stok --------------------------------------------------------------------

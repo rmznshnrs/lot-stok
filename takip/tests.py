@@ -5,6 +5,7 @@ from unittest import mock
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 
 from . import services
 from .models import (
@@ -175,7 +176,10 @@ class LotIzleTest(TemelVeri):
         self.assertEqual(sonuc['uretimler'][0]['satis']['musteri'], 'Atlas')
         self.assertEqual(
             sonuc['musteriler'],
-            [{'id': self.musteri.id, 'ad': 'Atlas', 'seri_nolar': ['SN-IP-0001', 'SN-IP-0002']}],
+            [{'id': self.musteri.id, 'ad': 'Atlas', 'iletisim': '',
+              'seri_nolar': ['SN-IP-0001', 'SN-IP-0002'],
+              'satislar': [{'seri_no': 'SN-IP-0001', 'tarih': timezone.localdate()},
+                           {'seri_no': 'SN-IP-0002', 'tarih': timezone.localdate()}]}],
         )
         self.assertEqual([u['seri_no'] for u in sonuc['stoktaki_uretimler']], ['SN-IP-0003'])
         self.assertEqual(uretimler[3].seri_no, 'SN-IP-0004')
@@ -301,6 +305,7 @@ class MenuTest(TestCase):
                 self.assertEqual(yanit.status_code, 200)
                 self.assertContains(yanit, 'class="aktif"')
                 self.assertContains(yanit, 'takip/style.css')
+                self.assertNotContains(yanit, 'hazırlanıyor')
 
 
 class ParcalarEkraniTest(TemelVeri):
@@ -584,3 +589,256 @@ class UretimEkraniTest(TemelVeri):
     def test_gecersiz_post(self):
         self.client.post(self.url, {'urun': self.urun.pk, 'adet': 0})
         self.assertEqual(Uretim.objects.count(), 0)
+
+
+class NumaraAraTest(TemelVeri):
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 2)
+
+    def test_birebir_eslesme(self):
+        self.assertEqual(services.numara_ara(' l-d-eski '),
+                         {'tur': 'lot', 'deger': 'L-D-ESKI', 'adaylar': []})
+        self.assertEqual(services.numara_ara('sn-ip-0002')['tur'], 'seri')
+        self.assertEqual(services.numara_ara('sn-ip-0002')['deger'], 'SN-IP-0002')
+        self.assertEqual(services.numara_ara('led'), {'tur': 'parca', 'deger': 'LED',
+                                                      'adaylar': []})
+
+    def test_kismi_eslesme(self):
+        self.assertEqual(services.numara_ara('ESKI')['deger'], 'L-D-ESKI')  # tek aday
+        sonuc = services.numara_ara('SN-IP')
+        self.assertIsNone(sonuc['tur'])
+        self.assertEqual(sonuc['adaylar'], [('seri', 'SN-IP-0001'), ('seri', 'SN-IP-0002')])
+        self.assertEqual(services.numara_ara('L-D')['adaylar'],
+                         [('lot', 'L-D-ESKI'), ('lot', 'L-D-GERI'), ('lot', 'L-D-YENI')])
+
+    def test_bulunamadi_ve_bos(self):
+        self.assertEqual(services.numara_ara('XYZ'), {'tur': None, 'deger': None, 'adaylar': []})
+        self.assertIsNone(services.numara_ara('  ')['tur'])
+
+
+class SonHareketlerTest(TemelVeri):
+    def test_giris_uretim_satis_yeniden_eskiye(self):
+        services.uretim_yap(self.urun, 3)
+        services.satis_yap(self.musteri, ['SN-IP-0001', 'SN-IP-0002'])
+        h = services.son_hareketler(limit=20)
+        self.assertEqual([x['tur'] for x in h[:2]], ['satis', 'uretim'])
+        self.assertEqual(h[0]['numara'], 'SN-IP-0001 … SN-IP-0002')
+        self.assertIn('Atlas', h[0]['aciklama'])
+        # 3 üretim tek satırda
+        self.assertEqual(h[1]['aciklama'], 'İndikatör Paneli · 3 adet')
+        self.assertEqual(h[1]['numara'], 'SN-IP-0001 … SN-IP-0003')
+        girisler = [x for x in h if x['tur'] == 'giris']
+        self.assertEqual(len(girisler), 4)
+        self.assertEqual(girisler[0]['numara'], 'L-D-YENI')  # en yeni sipariş tarihi
+
+    def test_limit(self):
+        self.assertEqual(len(services.son_hareketler(limit=2)), 2)
+
+
+class LotGeriCagirTest(TemelVeri):
+    def test_geri_cagir_ve_kaldir(self):
+        lot = services.lot_geri_cagir('l-d-eski')
+        self.assertTrue(lot.geri_cagrildi)
+        self.diyot_eski.refresh_from_db()
+        self.assertTrue(self.diyot_eski.geri_cagrildi)
+        services.lot_geri_cagir('L-D-ESKI', geri_cagir=False)
+        self.diyot_eski.refresh_from_db()
+        self.assertFalse(self.diyot_eski.geri_cagrildi)
+
+    def test_bilinmeyen_lot(self):
+        with self.assertRaises(StokLotu.DoesNotExist):
+            services.lot_geri_cagir('YOK')
+
+
+class SatisYardimcilariTest(TemelVeri):
+    def test_musteri_getir_veya_olustur(self):
+        self.assertEqual(services.musteri_getir_veya_olustur(' atlas '), (self.musteri, False))
+        m, yeni = services.musteri_getir_veya_olustur('Yeni  Müşteri')
+        self.assertTrue(yeni)
+        self.assertEqual(m.ad, 'Yeni Müşteri')
+        with self.assertRaises(ValueError):
+            services.musteri_getir_veya_olustur('  ')
+
+    def test_satilabilir_uretim(self):
+        services.uretim_yap(self.urun, 2)
+        self.assertEqual(services.satilabilir_uretim('sn-ip-0001').seri_no, 'SN-IP-0001')
+        services.satis_yap(self.musteri, ['SN-IP-0001'])
+        with self.assertRaisesMessage(SatisHatasi, 'daha önce satılmış: Atlas'):
+            services.satilabilir_uretim('SN-IP-0001')
+        with self.assertRaisesMessage(SatisHatasi, 'bulunamadı'):
+            services.satilabilir_uretim('SN-YOK')
+
+    def test_satis_gecmisi(self):
+        services.uretim_yap(self.urun, 3)
+        services.satis_yap(self.musteri, ['SN-IP-0002', 'SN-IP-0001'], tarih=date(2026, 5, 1))
+        diger = Musteri.objects.create(ad='Beta')
+        services.satis_yap(diger, ['SN-IP-0003'], tarih=date(2026, 6, 1))
+        g = services.satis_gecmisi()
+        self.assertEqual([(x['musteri'].ad, x['seri_nolar']) for x in g],
+                         [('Beta', ['SN-IP-0003']), ('Atlas', ['SN-IP-0001', 'SN-IP-0002'])])
+        self.assertEqual([x['musteri'].ad for x in services.satis_gecmisi('0001')], ['Atlas'])
+        self.assertEqual([x['musteri'].ad for x in services.satis_gecmisi('bet')], ['Beta'])
+
+
+class AnaSayfaEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:ana_sayfa')
+
+    def test_sayfa(self):
+        services.uretim_yap(self.urun, 1)
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'Bir lot veya seri numarasının izini sür')
+        self.assertContains(yanit, 'Mal girişi yap')
+        self.assertContains(yanit, 'Son hareketler')
+        self.assertContains(yanit, 'SN-IP-0001')
+        self.assertNotContains(yanit, '[')
+
+    def test_otomatik_algilama_yonlendirir(self):
+        services.uretim_yap(self.urun, 1)
+        iz = reverse('takip:izlenebilirlik')
+        self.assertRedirects(self.client.get(self.url, {'q': 'l-d-eski'}), f'{iz}?lot=L-D-ESKI')
+        self.assertRedirects(self.client.get(self.url, {'q': 'sn-ip-0001'}),
+                             f'{iz}?sekme=seri&seri=SN-IP-0001')
+        self.assertRedirects(self.client.get(self.url, {'q': 'DIY'}),
+                             f"{reverse('takip:stok')}?parca=DIY")
+
+    def test_adaylar_ve_bulunamadi(self):
+        yanit = self.client.get(self.url, {'q': 'L-D'})
+        self.assertContains(yanit, 'birebir eşleşmedi')
+        self.assertContains(yanit, 'L-D-GERI')
+        self.assertContains(self.client.get(self.url, {'q': 'XYZ'}), 'bulunamadı')
+
+
+class IzlenebilirlikEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:izlenebilirlik')
+
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
+        self.musteri.iletisim = 'atlas@ornek.example'
+        self.musteri.save()
+        services.satis_yap(self.musteri, ['SN-IP-0001'], tarih=date(2026, 5, 12))
+
+    def test_lot_akisi(self):
+        yanit = self.client.get(self.url, {'lot': 'l-d-eski'})
+        self.assertContains(yanit, '3 üründe kullanıldı')
+        self.assertContains(yanit, '1 müşteriye ulaştı')
+        self.assertContains(yanit, '2 ürün depoda')
+        self.assertContains(yanit, 'Bu lotu geri çağır')
+        self.assertContains(yanit, 'rozet rozet--uyari">Satıldı')
+        self.assertContains(yanit, 'rozet rozet--basari">Depoda')
+        self.assertContains(yanit, 'atlas@ornek.example')
+        self.assertContains(yanit, '12.05.2026')
+        self.assertContains(yanit, 'bu lottan parça içeriyor')
+        self.assertNotContains(yanit, 'SN-IP-0004')
+        self.assertNotIn('[', yanit.content.decode().split('<script>')[0])
+
+    def test_seri_parcalar(self):
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        yanit = self.client.get(self.url, {'sekme': 'seri', 'seri': 'sn-ip-0001'})
+        self.assertContains(yanit, 'SN-IP-0001')
+        self.assertContains(yanit, 'Atlas · 12.05.2026')
+        self.assertContains(yanit, 'L-D-ESKI</a> <span class="lot-etiket lot-etiket--uyari">')
+        self.assertContains(yanit, 'Bu üründe geri çağrılan 1 lot var.')
+        self.assertContains(yanit, 'L-LED')
+
+    def test_satilmamis_seri(self):
+        yanit = self.client.get(self.url, {'seri': 'SN-IP-0004'})
+        self.assertEqual(yanit.context['sekme'], 'seri')
+        self.assertContains(yanit, 'Henüz satılmadı')
+        self.assertNotContains(yanit, 'geri çağrılan')
+
+    def test_bulunamadi_ve_bos(self):
+        self.assertContains(self.client.get(self.url, {'lot': 'YOK'}), 'bulunamadı')
+        self.assertContains(self.client.get(self.url, {'sekme': 'seri', 'seri': 'YOK'}),
+                            'bulunamadı')
+        self.assertContains(self.client.get(self.url), 'Bir lot numarası girin')
+
+    def test_geri_cagir_butonu(self):
+        url = reverse('takip:lot_geri_cagir')
+        yanit = self.client.post(url, {'lot_no': 'L-D-ESKI'}, follow=True)
+        self.assertRedirects(yanit, f'{self.url}?lot=L-D-ESKI')
+        self.assertTrue(StokLotu.objects.get(pk=self.diyot_eski.pk).geri_cagrildi)
+        self.assertContains(yanit, 'L-D-ESKI geri çağrıldı')
+        self.assertContains(yanit, 'Geri çağırmayı kaldır')
+        self.assertContains(yanit, 'sevkiyattan önce ayrılmalı')
+        self.client.post(url, {'lot_no': 'L-D-ESKI', 'islem': 'kaldir'})
+        self.assertFalse(StokLotu.objects.get(pk=self.diyot_eski.pk).geri_cagrildi)
+
+    def test_geri_cagir_get_ile_calismaz(self):
+        self.assertEqual(self.client.get(reverse('takip:lot_geri_cagir')).status_code, 405)
+
+
+class SatisEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:satis')
+
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
+
+    def post(self, **veri):
+        return self.client.post(self.url, {'musteri': 'Atlas', 'tarih': '2026-06-01', **veri})
+
+    def test_ekle_kaydetmez_listeyi_gunceller(self):
+        yanit = self.post(yeni_seri='sn-ip-0001, SN-IP-0002 SN-YOK', islem='ekle')
+        self.assertEqual(Satis.objects.count(), 0)
+        self.assertEqual([k['uretim'].seri_no for k in yanit.context['sepet']],
+                         ['SN-IP-0001', 'SN-IP-0002'])
+        self.assertContains(yanit, 'SN-YOK seri numarası bulunamadı.')
+        self.assertContains(yanit, '2 ürün')
+
+    def test_kaldir_ve_tekrar_ekleme(self):
+        yanit = self.post(seri=['SN-IP-0001', 'SN-IP-0002'], islem='kaldir:SN-IP-0001')
+        self.assertEqual([k['uretim'].seri_no for k in yanit.context['sepet']], ['SN-IP-0002'])
+        yanit = self.post(seri=['SN-IP-0002'], yeni_seri='sn-ip-0002', islem='ekle')
+        self.assertContains(yanit, 'zaten listede')
+
+    def test_kaydet(self):
+        yanit = self.post(seri=['SN-IP-0001'], yeni_seri='SN-IP-0004', islem='kaydet')
+        self.assertRedirects(yanit, self.url, fetch_redirect_response=False)
+        satis = Satis.objects.get()
+        self.assertEqual((satis.musteri, satis.tarih), (self.musteri, date(2026, 6, 1)))
+        self.assertEqual(sorted(satis.kalemler.values_list('uretim__seri_no', flat=True)),
+                         ['SN-IP-0001', 'SN-IP-0004'])
+        sayfa = self.client.get(self.url)
+        self.assertContains(sayfa, 'Satış kaydedildi: Atlas, 2 ürün')
+        self.assertContains(sayfa, 'SN-IP-0001</a>, <a')  # geçmişte tek satır
+        self.assertNotIn('[', sayfa.content.decode())
+
+    def test_yeni_musteri_olusur(self):
+        self.client.post(self.url, {'musteri': 'Gama Ltd', 'tarih': '2026-06-01',
+                                    'seri': ['SN-IP-0004'], 'islem': 'kaydet'})
+        self.assertEqual(Satis.objects.get().musteri.ad, 'Gama Ltd')
+
+    def test_geri_cagrilan_lot_uyarisi_ve_onay(self):
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        yanit = self.post(yeni_seri='SN-IP-0001 SN-IP-0004', islem='ekle')
+        self.assertContains(yanit, 'Geri çağrılan lot içeriyor (L-D-ESKI)')
+        self.assertContains(yanit, 'sepet-oge sepet-oge--uyari')
+        self.assertContains(yanit, 'yine de sat')
+        # Onaysız kaydedilmez
+        yanit = self.post(seri=['SN-IP-0001', 'SN-IP-0004'], islem='kaydet')
+        self.assertEqual(yanit.status_code, 200)
+        self.assertEqual(Satis.objects.count(), 0)
+        # Onayla kaydedilir, uyarı mesajı gösterilir
+        yanit = self.client.post(self.url, {'musteri': 'Atlas', 'tarih': '2026-06-01',
+                                            'seri': ['SN-IP-0001', 'SN-IP-0004'],
+                                            'onay': '1', 'islem': 'kaydet'}, follow=True)
+        self.assertEqual(Satis.objects.count(), 1)
+        self.assertContains(yanit, 'SN-IP-0001 geri çağrılan lot içeriyor: L-D-ESKI.')
+
+    def test_hatalarda_kaydetmez(self):
+        services.satis_yap(self.musteri, ['SN-IP-0003'])
+        for veri in ({'seri': [], 'islem': 'kaydet'},
+                     {'seri': ['SN-IP-0003'], 'islem': 'kaydet'},
+                     {'seri': ['SN-IP-0001'], 'islem': 'kaydet', 'musteri': ''},
+                     {'seri': ['SN-IP-0001'], 'islem': 'kaydet', 'tarih': 'abc'}):
+            with self.subTest(veri=veri):
+                self.assertEqual(self.post(**veri).status_code, 200)
+        self.assertEqual(Satis.objects.count(), 1)
+
+    def test_gecmis_arama(self):
+        services.satis_yap(self.musteri, ['SN-IP-0003'])
+        yanit = self.client.get(self.url, {'q': 'atl'})
+        self.assertEqual(len(yanit.context['gecmis']), 1)
+        self.assertEqual(len(self.client.get(self.url, {'q': 'zzz'}).context['gecmis']), 0)

@@ -11,7 +11,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import (
-    Parca, Satis, SatisKalemi, StokLotu, Tedarikci, Uretim, UretimTuketim,
+    Musteri, Parca, Satis, SatisKalemi, StokLotu, Tedarikci, Uretim, UretimTuketim,
 )
 
 
@@ -272,7 +272,9 @@ def lot_izle(lot_no):
 
     Lot bulunamazsa None döner.
     """
-    lot = StokLotu.objects.select_related('parca', 'tedarikci').filter(lot_no=lot_no).first()
+    lot = StokLotu.objects.select_related('parca', 'tedarikci').filter(
+        lot_no__iexact=lot_no.strip()
+    ).first()
     if lot is None:
         return None
 
@@ -283,6 +285,7 @@ def lot_izle(lot_no):
             'uretim__satis_kalemi__satis__tarih',
             'uretim__satis_kalemi__satis__musteri__id',
             'uretim__satis_kalemi__satis__musteri__ad',
+            'uretim__satis_kalemi__satis__musteri__iletisim',
         )
         .annotate(adet=Sum('adet'))
         .order_by('uretim__seri_no')
@@ -298,11 +301,13 @@ def lot_izle(lot_no):
                 'musteri_id': s['uretim__satis_kalemi__satis__musteri__id'],
                 'musteri': s['uretim__satis_kalemi__satis__musteri__ad'],
             }
-            m = musteriler.setdefault(
-                satis['musteri_id'], {'id': satis['musteri_id'], 'ad': satis['musteri'],
-                                      'seri_nolar': []}
-            )
+            m = musteriler.setdefault(satis['musteri_id'], {
+                'id': satis['musteri_id'], 'ad': satis['musteri'],
+                'iletisim': s['uretim__satis_kalemi__satis__musteri__iletisim'],
+                'seri_nolar': [], 'satislar': [],
+            })
             m['seri_nolar'].append(s['uretim__seri_no'])
+            m['satislar'].append({'seri_no': s['uretim__seri_no'], 'tarih': satis['tarih']})
         uretimler.append({
             'id': s['uretim__id'],
             'seri_no': s['uretim__seri_no'],
@@ -326,7 +331,9 @@ def seri_izle(seri_no):
 
     Seri no bulunamazsa None döner.
     """
-    uretim = Uretim.objects.select_related('urun').filter(seri_no=seri_no).first()
+    uretim = Uretim.objects.select_related('urun').filter(
+        seri_no__iexact=seri_no.strip()
+    ).first()
     if uretim is None:
         return None
 
@@ -355,7 +362,152 @@ def seri_izle(seri_no):
     }
 
 
+def lot_geri_cagir(lot_no, geri_cagir=True):
+    """Lotu geri çağırır (veya geri çağırmayı kaldırır). Lot yoksa StokLotu.DoesNotExist."""
+    lot = StokLotu.objects.get(lot_no__iexact=lot_no.strip())
+    if lot.geri_cagrildi != geri_cagir:
+        lot.geri_cagrildi = geri_cagir
+        lot.save(update_fields=['geri_cagrildi'])
+    return lot
+
+
+def numara_ara(metin):
+    """Girilen numaranın türünü algılar: lot no, seri no veya parça kodu.
+
+    Önce birebir (büyük/küçük harf duyarsız) eşleşme aranır; yoksa numaranın bir
+    parçası olarak geçtiği lot ve seri numaraları aday olarak döner. Sonuç:
+    {'tur': 'lot' | 'seri' | 'parca' | None, 'deger': ..., 'adaylar': [(tur, deger)]}.
+    Tek aday varsa doğrudan o seçilir.
+    """
+    metin = metin.strip()
+    sonuc = {'tur': None, 'deger': None, 'adaylar': []}
+    if not metin:
+        return sonuc
+    lot = StokLotu.objects.filter(lot_no__iexact=metin).values_list('lot_no', flat=True).first()
+    if lot:
+        return {**sonuc, 'tur': 'lot', 'deger': lot}
+    seri = Uretim.objects.filter(seri_no__iexact=metin).values_list('seri_no', flat=True).first()
+    if seri:
+        return {**sonuc, 'tur': 'seri', 'deger': seri}
+    kod = Parca.objects.filter(kod__iexact=metin).values_list('kod', flat=True).first()
+    if kod:
+        return {**sonuc, 'tur': 'parca', 'deger': kod}
+
+    adaylar = [('lot', l) for l in StokLotu.objects.filter(lot_no__icontains=metin)
+               .order_by('lot_no').values_list('lot_no', flat=True)[:10]]
+    adaylar += [('seri', x) for x in Uretim.objects.filter(seri_no__icontains=metin)
+                .order_by('seri_no').values_list('seri_no', flat=True)[:10]]
+    if len(adaylar) == 1:
+        return {**sonuc, 'tur': adaylar[0][0], 'deger': adaylar[0][1]}
+    return {**sonuc, 'adaylar': adaylar}
+
+
+def _aralik(seriler):
+    return seriler[0] if len(seriler) == 1 else f'{seriler[0]} … {seriler[-1]}'
+
+
+def son_hareketler(limit=8):
+    """Ana sayfa için son mal girişi, üretim ve satışlar (yeniden eskiye).
+
+    Aynı anda yapılan üretimler (tek uretim_yap çağrısı) tek satırda toplanır.
+    Mal girişinin tarihi olarak lotun sipariş tarihi kullanılır.
+    """
+    hareketler = []
+    for lot in StokLotu.objects.select_related('parca', 'tedarikci').order_by('-id')[:limit]:
+        hareketler.append({
+            'tur': 'giris', 'tarih': lot.siparis_tarihi, 'sira': lot.id,
+            'aciklama': f'{lot.parca.ad} · {lot.giris_adet} {lot.parca.birim} · {lot.tedarikci.ad}',
+            'numara': lot.lot_no, 'numara_ilk': lot.lot_no, 'numara_turu': 'lot',
+        })
+
+    gruplar = {}
+    for u in Uretim.objects.select_related('urun').order_by('-tarih', '-id')[:limit * 20]:
+        g = gruplar.setdefault((u.urun_id, u.tarih), {
+            'urun': u.urun, 'tarih': u.tarih, 'seri_nolar': [], 'sira': u.id,
+        })
+        g['seri_nolar'].append(u.seri_no)
+    for g in list(gruplar.values())[:limit]:
+        seriler = sorted(g['seri_nolar'])
+        hareketler.append({
+            'tur': 'uretim', 'tarih': timezone.localtime(g['tarih']).date(), 'sira': g['sira'],
+            'aciklama': f"{g['urun'].ad} · {len(seriler)} adet",
+            'numara': _aralik(seriler), 'numara_ilk': seriler[0], 'numara_turu': 'seri',
+        })
+
+    satislar = (Satis.objects.select_related('musteri')
+                .prefetch_related('kalemler__uretim__urun').order_by('-tarih', '-id')[:limit])
+    for satis in satislar:
+        kalemler = sorted(satis.kalemler.all(), key=lambda k: k.uretim.seri_no)
+        if not kalemler:
+            continue
+        urunler = ', '.join(sorted({k.uretim.urun.ad for k in kalemler}))
+        seriler = [k.uretim.seri_no for k in kalemler]
+        adet = f' · {len(seriler)} adet' if len(seriler) > 1 else ''
+        hareketler.append({
+            'tur': 'satis', 'tarih': satis.tarih, 'sira': satis.id,
+            'aciklama': f'{urunler} · {satis.musteri.ad}{adet}',
+            'numara': _aralik(seriler), 'numara_ilk': seriler[0], 'numara_turu': 'seri',
+        })
+
+    oncelik = {'satis': 2, 'uretim': 1, 'giris': 0}
+    hareketler.sort(key=lambda h: (h['tarih'], oncelik[h['tur']], h['sira']), reverse=True)
+    return hareketler[:limit]
+
+
 # --- Satış -------------------------------------------------------------------
+
+def musteri_getir_veya_olustur(ad):
+    """Adı (büyük/küçük harf duyarsız) eşleşen müşteriyi döndürür, yoksa oluşturur.
+
+    (musteri, yeni_mi) döndürür.
+    """
+    ad = ' '.join(ad.split())
+    if not ad:
+        raise ValueError('Müşteri adı boş olamaz.')
+    musteri = Musteri.objects.filter(ad__iexact=ad).first()
+    if musteri:
+        return musteri, False
+    return Musteri.objects.create(ad=ad), True
+
+
+def satilabilir_uretim(seri_no):
+    """Satış listesine eklenecek seri no'yu doğrular; Uretim döndürür.
+
+    Bulunamazsa veya daha önce satılmışsa SatisHatasi fırlatır.
+    """
+    seri_no = seri_no.strip()
+    uretim = Uretim.objects.select_related('urun').filter(seri_no__iexact=seri_no).first()
+    if uretim is None:
+        raise SatisHatasi(f'{seri_no} seri numarası bulunamadı.')
+    kalem = SatisKalemi.objects.select_related('satis__musteri').filter(uretim=uretim).first()
+    if kalem:
+        raise SatisHatasi(
+            f'{uretim.seri_no} daha önce satılmış: {kalem.satis.musteri.ad}, '
+            f'{kalem.satis.tarih:%d.%m.%Y}.'
+        )
+    return uretim
+
+
+def satis_gecmisi(q='', limit=50):
+    """Satış geçmişi: her satış + ürün için bir satır (yeniden eskiye).
+
+    q müşteri adında veya seri no'da arar.
+    """
+    satislar = Satis.objects.select_related('musteri').order_by('-tarih', '-id')
+    if q:
+        satislar = satislar.filter(
+            Q(musteri__ad__icontains=q) | Q(kalemler__uretim__seri_no__icontains=q)
+        ).distinct()
+    satirlar = []
+    for satis in satislar.prefetch_related('kalemler__uretim__urun')[:limit]:
+        urunler = {}
+        for kalem in satis.kalemler.all():
+            urunler.setdefault(kalem.uretim.urun, []).append(kalem.uretim.seri_no)
+        for urun, seriler in sorted(urunler.items(), key=lambda x: x[0].ad):
+            satirlar.append({'satis': satis, 'musteri': satis.musteri, 'urun': urun,
+                             'seri_nolar': sorted(seriler)})
+    return satirlar
+
 
 @dataclass
 class SatisSonucu:
