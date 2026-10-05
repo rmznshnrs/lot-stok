@@ -1,8 +1,16 @@
+# Python / sanal ortam
 .venv/
 __pycache__/
 *.pyc
+
+# Veritabanı (gerçek veri repoya girmez; örnek veri için: manage.py ornek_veri)
 db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+
+# Arşivler (ör. mockup zip'leri; içerikleri docs/mockup/ altında açık hâlde)
+*.zip
+
 /staticfiles/
 .env
 .claude/settings.local.json
-docs/mockup/*.zip
