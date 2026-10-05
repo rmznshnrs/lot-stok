@@ -16,6 +16,7 @@ from takip.models import (
     Urun,
     UrunAgaci,
 )
+from takip.services import satis_yap, uretim_yap
 
 PARCALAR = [
     # kod, ad, birim, min_stok
@@ -119,17 +120,14 @@ class Command(BaseCommand):
             urunler[kod] = urun
 
         for urun_kodu, adet, tarih in URETIMLER:
-            for _ in range(adet):
-                self._uret(urunler[urun_kodu], timezone.make_aware(tarih))
+            uretim_yap(urunler[urun_kodu], adet, tarih=timezone.make_aware(tarih))
 
         musteriler = {
             ad: Musteri.objects.create(ad=ad, iletisim=iletisim)
             for ad, iletisim in MUSTERILER
         }
         for musteri_ad, tarih, seriler in SATISLAR:
-            satis = Satis.objects.create(musteri=musteriler[musteri_ad], tarih=tarih)
-            for seri in seriler:
-                SatisKalemi.objects.create(satis=satis, uretim=Uretim.objects.get(seri_no=seri))
+            satis_yap(musteriler[musteri_ad], seriler, tarih=tarih)
 
         self.stdout.write(self.style.SUCCESS(
             f'Örnek veri yüklendi: {Parca.objects.count()} parça, '
@@ -142,28 +140,3 @@ class Command(BaseCommand):
         for model in (SatisKalemi, Satis, Musteri, UretimTuketim, Uretim,
                       UrunAgaci, Urun, StokLotu, Tedarikci, Parca):
             model.objects.all().delete()
-
-    def _uret(self, urun, tarih):
-        """Örnek veri için basit FIFO üretim.
-
-        Asıl kurallı üretim takip/services.py'deki uretim_yap'ta olacak (Adım 6).
-        """
-        sira = Uretim.objects.filter(urun=urun).count() + 1
-        uretim = Uretim.objects.create(
-            urun=urun, seri_no=f'{urun.seri_oneki}{sira:04d}', tarih=tarih
-        )
-        for satir in urun.agac.select_related('parca'):
-            gereken = satir.adet
-            lotlar = StokLotu.objects.filter(
-                parca=satir.parca, geri_cagrildi=False, kalan_adet__gt=0
-            ).order_by('siparis_tarihi', 'id')
-            for lot in lotlar:
-                dusulen = min(gereken, lot.kalan_adet)
-                lot.kalan_adet -= dusulen
-                lot.save(update_fields=['kalan_adet'])
-                UretimTuketim.objects.create(uretim=uretim, stok_lotu=lot, adet=dusulen)
-                gereken -= dusulen
-                if gereken == 0:
-                    break
-            if gereken:
-                raise CommandError(f'{urun.kod} için {satir.parca.kod} stoğu yetersiz.')
