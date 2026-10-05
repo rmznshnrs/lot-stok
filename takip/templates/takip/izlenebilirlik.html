@@ -39,6 +39,7 @@
       <div class="bilgi-izgara">
         <div class="bilgi"><span>Tedarikçi</span><span>{{ iz.lot.tedarikci.ad }}</span></div>
         <div class="bilgi"><span>Sipariş tarihi</span><span>{{ iz.lot.siparis_tarihi|date:"d.m.Y" }}</span></div>
+        <div class="bilgi"><span>Giriş zamanı</span><span>{{ iz.lot.giris_zamani|date:"d.m.Y H:i" }}</span></div>
         <div class="bilgi"><span>Gelen adet</span><span>{{ iz.lot.giris_adet }}</span></div>
         <div class="bilgi"><span>Stokta kalan</span><span>{{ iz.lot.kalan_adet }}</span></div>
         {% if iz.lot.siparis_no %}<div class="bilgi"><span>Sipariş no</span><span>{{ iz.lot.siparis_no }}</span></div>{% endif %}

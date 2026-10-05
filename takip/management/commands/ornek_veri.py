@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
@@ -110,6 +110,10 @@ class Command(BaseCommand):
                 lot_no=lot_no, parca=parcalar[parca], tedarikci=tedarikciler[tedarikci],
                 siparis_tarihi=tarih, siparis_no=siparis_no, giris_adet=adet,
                 geri_cagrildi=geri,
+                # Parça siparişten bir hafta sonra gelmiş gibi
+                giris_zamani=timezone.make_aware(
+                    datetime.combine(tarih + timedelta(days=7), time(9, 30))
+                ),
             )
 
         urunler = {}

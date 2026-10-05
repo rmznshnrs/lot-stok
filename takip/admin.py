@@ -58,7 +58,7 @@ class TedarikciAdmin(admin.ModelAdmin):
 @admin.register(StokLotu)
 class StokLotuAdmin(admin.ModelAdmin):
     list_display = [
-        'lot_no', 'parca', 'tedarikci', 'siparis_tarihi', 'siparis_no',
+        'lot_no', 'parca', 'tedarikci', 'siparis_tarihi', 'giris_zamani', 'siparis_no',
         'giris_adet', 'kalan_adet', 'geri_cagrildi',
     ]
     list_filter = ['geri_cagrildi', 'parca', 'tedarikci']

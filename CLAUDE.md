@@ -19,7 +19,7 @@ Parça tanımla → Ürün tanımla + ürün ağacı → Mal girişi (lot) → �
 Parca          (kod, ad, birim, min_stok)
 Tedarikci      (ad, iletisim)
 StokLotu       (parca, tedarikci, lot_no, siparis_tarihi, siparis_no,
-                giris_adet, kalan_adet, geri_cagrildi)
+                giris_adet, kalan_adet, geri_cagrildi, giris_zamani)
 Urun           (kod, ad, seri_oneki)            -- ör. IP, "SN-IP-"
 UrunAgaci      (urun, parca, adet)              -- 1 ürün için gereken parça
 Uretim         (urun, seri_no, tarih)           -- her ürün tek seri no
@@ -30,7 +30,8 @@ SatisKalemi    (satis, uretim)                  -- satılan seri numaraları
 ```
 Notlar: lot_no, seri_no, Parca.kod, Urun.kod/seri_oneki tekil. SatisKalemi.uretim
 OneToOne (bir seri no bir kez satılır). İlişkiler PROTECT (UrunAgaci.urun hariç).
-kalan_adet boş bırakılırsa giris_adet ile dolar. Admin'de Uretim/UretimTuketim salt
+kalan_adet boş bırakılırsa giris_adet ile dolar. giris_zamani mal girişinin
+kaydedildiği an (son hareketlerde kullanılır); FIFO yine siparis_tarihi'ne göredir. Admin'de Uretim/UretimTuketim salt
 okunur (üretim yalnızca services ile); üretim ve satış kayıtları admin'den silinemez.
 Sanal ortam: .venv (`.venv\Scripts\python manage.py ...`).
 

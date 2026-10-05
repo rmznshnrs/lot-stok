@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from io import StringIO
 from unittest import mock
 
@@ -439,6 +439,7 @@ class MalGirisiTest(TemelVeri):
         self.assertFalse(yeni)
         self.assertEqual((lot.lot_no, lot.giris_adet, lot.kalan_adet, lot.tedarikci),
                          ('L-YENI', 40, 40, self.ted))
+        self.assertLess(abs((timezone.now() - lot.giris_zamani).total_seconds()), 60)
 
     def test_yeni_tedarikci_olusur(self):
         lot, yeni = services.mal_girisi(self.diyot, '  Yeni   Firma ', 'L-X', 1, date(2026, 9, 1))
@@ -630,7 +631,17 @@ class SonHareketlerTest(TemelVeri):
         self.assertEqual(h[1]['numara'], 'SN-IP-0001 … SN-IP-0003')
         girisler = [x for x in h if x['tur'] == 'giris']
         self.assertEqual(len(girisler), 4)
-        self.assertEqual(girisler[0]['numara'], 'L-D-YENI')  # en yeni sipariş tarihi
+
+    def test_giris_siparis_tarihine_degil_giris_zamanina_gore_siralanir(self):
+        # En eski siparişli lot en son girilmiş olsun.
+        StokLotu.objects.filter(pk=self.diyot_geri.pk).update(
+            giris_zamani=timezone.now() + timedelta(hours=1))
+        StokLotu.objects.filter(pk=self.led_lot.pk).update(
+            giris_zamani=timezone.now() - timedelta(days=30))
+        girisler = [x['numara'] for x in services.son_hareketler(limit=20)
+                    if x['tur'] == 'giris']
+        self.assertEqual(girisler[0], 'L-D-GERI')
+        self.assertEqual(girisler[-1], 'L-LED')
 
     def test_limit(self):
         self.assertEqual(len(services.son_hareketler(limit=2)), 2)

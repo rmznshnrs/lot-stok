@@ -44,6 +44,8 @@ class StokLotu(models.Model):
     # Boş bırakılırsa ilk kayıtta giris_adet ile doldurulur.
     kalan_adet = models.PositiveIntegerField('Kalan adet', blank=True)
     geri_cagrildi = models.BooleanField('Geri çağrıldı', default=False)
+    # Mal girişinin sisteme kaydedildiği an (FIFO sırası değil; o siparis_tarihi).
+    giris_zamani = models.DateTimeField('Giriş zamanı', default=timezone.now)
 
     class Meta:
         verbose_name = 'Stok lotu'

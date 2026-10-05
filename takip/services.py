@@ -410,12 +410,16 @@ def son_hareketler(limit=8):
     """Ana sayfa için son mal girişi, üretim ve satışlar (yeniden eskiye).
 
     Aynı anda yapılan üretimler (tek uretim_yap çağrısı) tek satırda toplanır.
-    Mal girişinin tarihi olarak lotun sipariş tarihi kullanılır.
+    Mal girişinin tarihi lotun giriş zamanıdır (sipariş tarihi değil).
     """
     hareketler = []
-    for lot in StokLotu.objects.select_related('parca', 'tedarikci').order_by('-id')[:limit]:
+    lotlar = StokLotu.objects.select_related('parca', 'tedarikci').order_by(
+        '-giris_zamani', '-id'
+    )[:limit]
+    for lot in lotlar:
         hareketler.append({
-            'tur': 'giris', 'tarih': lot.siparis_tarihi, 'sira': lot.id,
+            'tur': 'giris', 'tarih': timezone.localtime(lot.giris_zamani).date(),
+            'sira': lot.giris_zamani.timestamp(),
             'aciklama': f'{lot.parca.ad} · {lot.giris_adet} {lot.parca.birim} · {lot.tedarikci.ad}',
             'numara': lot.lot_no, 'numara_ilk': lot.lot_no, 'numara_turu': 'lot',
         })
