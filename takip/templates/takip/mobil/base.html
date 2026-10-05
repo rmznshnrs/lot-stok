@@ -1,5 +1,5 @@
 {% load static %}<!doctype html>
-<html lang="tr" data-sw-url="{% url 'takip:m_sw' %}" data-sw-scope="{% url 'takip:m_sorgula' %}">
+<html lang="tr" data-sw-url="{% url 'takip:m_sw' %}" data-sw-scope="{% url 'takip:m_ana' %}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -19,7 +19,7 @@
 </head>
 <body class="mobil">
 <header class="m-ust">
-  <a class="m-logo" href="{% url 'takip:ana_sayfa' %}" title="Masaüstü görünümü">LOT TAKİP</a>
+  {% block geri %}<span class="m-logo">LOT TAKİP</span>{% endblock %}
   <h1>{% block sayfa_basligi %}{% endblock %}</h1>
 </header>
 
@@ -34,21 +34,29 @@
 </main>
 
 <nav class="m-alt-menu" aria-label="Mobil menü">
-  <a href="{% url 'takip:m_sorgula' %}"{% if aktif == 'sorgula' %} class="aktif" aria-current="page"{% endif %}>
-    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>
-    Sorgula
+  <a href="{% url 'takip:m_ana' %}"{% if aktif == 'ana' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 9.5V20h4.5v-5h3v5H18V9.5"/></svg>
+    Ana Sayfa
   </a>
-  <a href="{% url 'takip:m_giris' %}"{% if aktif == 'giris' %} class="aktif" aria-current="page"{% endif %}>
+  <a href="{% url 'takip:m_stok' %}"{% if aktif == 'stok' %} class="aktif" aria-current="page"{% endif %}>
     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 8l9-5 9 5v8l-9 5-9-5zM3 8l9 5 9-5M12 13v8"/></svg>
-    Mal girişi
+    Stok
+  </a>
+  <a href="{% url 'takip:m_uretim' %}"{% if aktif == 'uretim' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4z"/></svg>
+    Üretim
   </a>
   <a href="{% url 'takip:m_satis' %}"{% if aktif == 'satis' %} class="aktif" aria-current="page"{% endif %}>
     <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h2l2.4 11h9.2L20 8H7.2M10 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM17 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/></svg>
     Satış
   </a>
+  <a href="{% url 'takip:m_daha' %}"{% if aktif == 'daha' %} class="aktif" aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/></svg>
+    Daha fazla
+  </a>
 </nav>
 
-{# Mal girişi ve satışta açılan tam ekran tarayıcı #}
+{# Kamerayla okutma için tam ekran tarayıcı (Ana Sayfa, mal girişi, satış, izlenebilirlik) #}
 <div id="tarama-penceresi" class="m-pencere" role="dialog" aria-modal="true" aria-labelledby="tarama-basligi" hidden>
   <div class="m-pencere-ust">
     <span id="tarama-basligi" data-baslik>Barkod tara</span>
@@ -64,5 +72,6 @@
 
 <script src="{% static 'takip/vendor/zxing.min.js' %}" defer></script>
 <script src="{% static 'takip/mobil.js' %}" defer></script>
+{% block js %}{% endblock %}
 </body>
 </html>

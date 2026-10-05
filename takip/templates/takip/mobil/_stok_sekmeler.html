@@ -1,0 +1,4 @@
+<nav class="sekmeler m-sekmeler" aria-label="Stok">
+  <a href="{% url 'takip:m_stok' %}" class="sekme{% if alt_sekme == 'liste' %} sekme--aktif{% endif %}"{% if alt_sekme == 'liste' %} aria-current="page"{% endif %}>Stok listesi</a>
+  <a href="{% url 'takip:m_giris' %}" class="sekme{% if alt_sekme == 'giris' %} sekme--aktif{% endif %}"{% if alt_sekme == 'giris' %} aria-current="page"{% endif %}>Mal girişi</a>
+</nav>

@@ -1,0 +1,69 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Ana Sayfa{% endblock %}
+{% block sayfa_basligi %}İzini sür{% endblock %}
+{% block icerik %}
+<form method="get" id="m-arama" class="m-kart" role="search">
+  <label for="m-q" class="m-etiket">Lot no, seri no veya parça kodu</label>
+  <div class="m-satir">
+    <input type="search" id="m-q" name="q" value="{{ q }}" class="girdi girdi--mono" placeholder="örn. SN-IP-0001" autocomplete="off" autocapitalize="characters" enterkeyhint="search">
+    <button type="submit" class="btn m-btn-orta">Ara</button>
+  </div>
+  <button type="button" class="btn btn--ikincil m-btn-buyuk m-btn-kamera" data-tara-hedef="m-q" data-tara-gonder data-tara-baslik="Etiketi okutun" hidden>
+    <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>
+    Barkod / karekod okut
+  </button>
+  <p class="yardim">Numaranın lot mu seri no mu olduğu kendiliğinden anlaşılır.</p>
+</form>
+
+{% if sonuc and sonuc.adaylar %}
+<section class="m-kart">
+  <div class="not">“{{ q }}” birebir eşleşmedi. Şunlardan birini mi arıyordunuz?</div>
+  <div class="m-kart-liste">
+    {% for tur, deger in sonuc.adaylar %}
+    <a href="{% url 'takip:m_iz' %}?{% if tur == 'lot' %}lot{% else %}sekme=seri&amp;seri{% endif %}={{ deger|urlencode }}" class="m-oge">
+      <span class="baslik-grup"><span class="mono">{{ deger }}</span><span class="yardim">{% if tur == 'lot' %}Lot{% else %}Seri no{% endif %}</span></span>
+      <span class="m-ok" aria-hidden="true">›</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% elif sonuc %}
+<div class="mesaj mesaj--warning">“{{ q }}” ile eşleşen lot, seri no veya parça kodu bulunamadı.</div>
+{% endif %}
+
+<section class="m-hizli" aria-label="Hızlı işlemler">
+  <a href="{% url 'takip:m_giris' %}" class="m-hizli-kart">
+    <span class="hizli-no">1</span>
+    <span class="baslik-grup"><span class="m-hizli-baslik">Mal girişi yap</span><span class="yardim">Gelen parçayı lot numarasıyla stoğa ekle</span></span>
+  </a>
+  <a href="{% url 'takip:m_uretim' %}" class="m-hizli-kart">
+    <span class="hizli-no">2</span>
+    <span class="baslik-grup"><span class="m-hizli-baslik">Ürün üret</span><span class="yardim">Parçalar ilk gelen lottan düşülür, seri no verilir</span></span>
+  </a>
+  <a href="{% url 'takip:m_satis' %}" class="m-hizli-kart">
+    <span class="hizli-no">3</span>
+    <span class="baslik-grup"><span class="m-hizli-baslik">Satış kaydet</span><span class="yardim">Seri numaralarını okutup müşteriye bağla</span></span>
+  </a>
+</section>
+
+<section class="m-bolum">
+  <h2 class="m-bolum-baslik">Son hareketler</h2>
+  <div class="m-kart-liste">
+    {% for h in hareketler %}
+    <a href="{% url 'takip:m_iz' %}?{% if h.numara_turu == 'lot' %}lot{% else %}sekme=seri&amp;seri{% endif %}={{ h.numara_ilk|urlencode }}" class="m-oge">
+      <span class="baslik-grup">
+        <span class="m-oge-ust">
+          {% if h.tur == 'giris' %}<span class="rozet rozet--mavi">Giriş</span>{% elif h.tur == 'uretim' %}<span class="rozet rozet--basari">Üretim</span>{% else %}<span class="rozet rozet--uyari">Satış</span>{% endif %}
+          <span class="yardim">{{ h.tarih|date:"d.m.Y" }}</span>
+        </span>
+        <span>{{ h.aciklama }}</span>
+        <span class="mono yardim">{{ h.numara }}</span>
+      </span>
+      <span class="m-ok" aria-hidden="true">›</span>
+    </a>
+    {% empty %}
+    <p class="not">Henüz hareket yok.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Üretim{% endblock %}
+{% block sayfa_basligi %}Üretim{% endblock %}
+{% block icerik %}
+{% if son_uretim %}
+<div class="sonuc-kutu" role="status">
+  <div class="sonuc-baslik">Üretim kaydedildi: {{ son_uretim.seri_nolar|length }} adet {{ son_uretim.urun }}</div>
+  <div class="seri-listesi">
+    {% for s in son_uretim.seri_nolar %}<a href="{% url 'takip:m_iz' %}?sekme=seri&amp;seri={{ s|urlencode }}" class="seri-cip">{{ s }}</a>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if not urun %}
+<section class="m-kart">
+  <p class="not not--buyuk">Üretim için önce bir ürün ve ürün ağacı tanımlayın.</p>
+  <a href="{% url 'takip:m_urun_yeni' %}" class="btn m-btn-buyuk">+ Yeni ürün</a>
+</section>
+{% else %}
+<form method="get" id="m-uretim-formu" class="m-kart">
+  <div class="alan">
+    <label for="m-urun">Ürün</label>
+    <select id="m-urun" name="urun" class="girdi" data-otomatik-gonder>
+      {% for u in urunler %}<option value="{{ u.pk }}"{% if u.pk == urun.pk %} selected{% endif %}>{{ u.ad }} ({{ u.kod }}) · {{ u.parca_cesidi }} parça</option>{% endfor %}
+    </select>
+  </div>
+  <div class="alan">
+    <label for="m-adet">Kaç adet?</label>
+    <div class="m-adim">
+      <button type="button" class="m-adim-btn" data-adim="-1" aria-label="Azalt">−</button>
+      <input type="number" id="m-adet" name="adet" value="{{ adet }}" min="1" max="999" inputmode="numeric" class="girdi m-adim-girdi" data-otomatik-gonder>
+      <button type="button" class="m-adim-btn" data-adim="1" aria-label="Arttır">+</button>
+    </div>
+  </div>
+  <noscript><button type="submit" class="btn btn--ikincil m-btn-tam">Parçaları kontrol et</button></noscript>
+  <a href="{% url 'takip:m_urun' urun.pk %}" class="m-kucuk-baglanti">Ürün ağacını düzenle</a>
+</form>
+
+<section class="m-bolum">
+  <h2 class="m-bolum-baslik">Parça kontrolü</h2>
+  <p class="yardim">Lotlar otomatik seçilir: önce gelen önce kullanılır.</p>
+  {% if hata %}
+  <div class="mesaj mesaj--warning">{{ hata }} <a href="{% url 'takip:m_urun' urun.pk %}">Ürün ağacına parça ekleyin.</a></div>
+  {% else %}
+  <div class="m-kart-liste">
+    {% for p in onizleme.parcalar %}
+    <div class="m-oge m-oge--dikey{% if p.eksik %} m-oge--uyari{% endif %}">
+      <span class="m-oge-ust">
+        <span class="kalin">{{ p.parca.ad }}</span>
+        {% if p.eksik %}<span class="rozet rozet--uyari">{{ p.eksik }} eksik</span>{% else %}<span class="rozet rozet--basari">Yeterli</span>{% endif %}
+      </span>
+      <span class="yardim">Gereken <strong>{{ p.gereken }}</strong> · Kullanılabilir {{ p.kullanilabilir }} · <span class="mono">{{ p.parca.kod }}</span></span>
+      <span class="mono m-lotlar">{% for d in p.lotlar %}{{ d.lot.lot_no }} × {{ d.adet }}{% if not forloop.last %} · {% endif %}{% empty %}<span class="soluk">kullanılabilir lot yok</span>{% endfor %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if atlanan_lotlar %}<p class="yardim">Geri çağrılan lotlar ({% for l in atlanan_lotlar %}<span class="mono">{{ l }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}) otomatik olarak atlanır.</p>{% endif %}
+
+  <form method="post" class="m-kart" id="m-uretim-kaydet">
+    {% csrf_token %}
+    {{ form.urun }}
+    <input type="hidden" name="adet" value="{{ adet }}">
+    <div class="bilgi">
+      <span>Verilecek seri numaraları</span>
+      <span class="mono kalin">{{ onizleme.seri_nolar|first }}{% if onizleme.seri_nolar|length > 1 %} … {{ onizleme.seri_nolar|last }}{% endif %}</span>
+    </div>
+    {% if not onizleme.yeterli %}<div class="uyari-kutu">Eksik parça var; üretim kaydedilemez.</div>{% endif %}
+    <button type="submit" class="btn m-btn-buyuk"{% if not onizleme.yeterli %} disabled{% endif %}>{{ adet }} adet üret ve kaydet</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

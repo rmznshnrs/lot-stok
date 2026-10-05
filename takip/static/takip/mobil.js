@@ -149,26 +149,7 @@
     return tarayici;
   }
 
-  // --- Sorgula ekranı: satır içi kamera kutusu --------------------------------
-
-  var sorguKutusu = document.querySelector('[data-sorgu-kamera]');
-  if (sorguKutusu) {
-    var sorguFormu = document.getElementById('sorgu-formu');
-    var sorguTarayici = new Tarayici(sorguKutusu, function (deger, t) {
-      t.durdur();
-      sorguFormu.q.value = deger;
-      sorguFormu.submit();
-    });
-    sorguKutusu.querySelector('[data-kamera-ac]').addEventListener('click', function () {
-      sorguTarayici.baslat();
-    });
-    sorguKutusu.querySelector('[data-kamera-kapat]').addEventListener('click', function () {
-      sorguTarayici.durdur();
-      sorguTarayici.yaz('Barkodu / etiketi kameraya tutun');
-    });
-  }
-
-  // --- Mal girişi: lot numarasını tara ---------------------------------------
+  // --- "Tara" düğmeleri: okunan numarayı hedef kutuya yaz (istenirse ara) ----
 
   document.querySelectorAll('[data-tara-hedef]').forEach(function (dugme) {
     dugme.hidden = false;
@@ -177,8 +158,50 @@
       pencereAc(dugme.dataset.taraBaslik || 'Barkod tara', function (deger, t) {
         hedef.value = deger;
         t.kapat();
-        hedef.focus();
+        if (dugme.hasAttribute('data-tara-gonder')) hedef.form.submit();
+        else hedef.focus();
       });
+    });
+  });
+
+  // --- Değişince formu gönder (üretim: ürün / adet önizlemesi) ----------------
+
+  document.querySelectorAll('[data-otomatik-gonder]').forEach(function (alan) {
+    alan.addEventListener('change', function () { alan.form.submit(); });
+  });
+
+  // --- Büyük −/+ düğmeleri ---------------------------------------------------
+
+  document.querySelectorAll('[data-adim]').forEach(function (dugme) {
+    dugme.addEventListener('click', function () {
+      var girdi = dugme.parentElement.querySelector('input[type="number"]');
+      var en_az = parseInt(girdi.min || '1', 10), en_cok = parseInt(girdi.max || '999', 10);
+      var deger = (parseInt(girdi.value, 10) || en_az) + parseInt(dugme.dataset.adim, 10);
+      girdi.value = Math.min(en_cok, Math.max(en_az, deger));
+      girdi.dispatchEvent(new Event('change'));
+    });
+  });
+
+  // --- Onay isteyen düğmeler (lotu geri çağır) --------------------------------
+
+  document.querySelectorAll('[data-onay]').forEach(function (dugme) {
+    dugme.form.addEventListener('submit', function (e) {
+      if (e.submitter === dugme && !window.confirm(dugme.dataset.onay)) e.preventDefault();
+    });
+  });
+
+  // --- Kayıt formları: çift dokunuşta iki kez kaydedilmesin -------------------
+  // Düğme, form verisi alındıktan sonra kilitlenir (submit sırasında kilitlenirse
+  // düğmenin name/value'su gönderilmez). Satış formunun kendi koruması var.
+
+  document.querySelectorAll('form[method="post"]:not(#m-satis-formu)').forEach(function (form) {
+    var gonderildi = false;
+    form.addEventListener('submit', function (e) {
+      if (e.defaultPrevented) return;
+      if (gonderildi) { e.preventDefault(); return; }
+      gonderildi = true;
+      var dugme = e.submitter;
+      if (dugme) setTimeout(function () { dugme.disabled = true; }, 0);
     });
   });
 

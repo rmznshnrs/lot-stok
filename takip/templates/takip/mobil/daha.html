@@ -1,0 +1,30 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Daha fazla{% endblock %}
+{% block sayfa_basligi %}Daha fazla{% endblock %}
+{% block icerik %}
+<nav class="m-kart-liste" aria-label="Diğer ekranlar">
+  <a href="{% url 'takip:m_iz' %}" class="m-oge m-oge--menu">
+    <span class="baslik-grup"><span class="kalin">İzlenebilirlik</span><span class="yardim">Lot → ürün → müşteri, seri no → parçalar, geri çağırma</span></span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+  <a href="{% url 'takip:m_urunler' %}" class="m-oge m-oge--menu">
+    <span class="baslik-grup"><span class="kalin">Ürünler</span><span class="yardim">Ürün tanımları ve ürün ağacı</span></span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+  <a href="{% url 'takip:m_parcalar' %}" class="m-oge m-oge--menu">
+    <span class="baslik-grup"><span class="kalin">Parçalar</span><span class="yardim">Parça tanımlama ve parça listesi</span></span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+</nav>
+
+<nav class="m-kart-liste" aria-label="Diğer">
+  <a href="{% url 'takip:ana_sayfa' %}" class="m-oge m-oge--menu">
+    <span class="baslik-grup"><span>Masaüstü görünümü</span><span class="yardim">Geniş ekran için tüm tablolar</span></span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+  <a href="{% url 'admin:index' %}" class="m-oge m-oge--menu">
+    <span class="baslik-grup"><span>Yönetim paneli</span><span class="yardim">Kullanıcı girişi gerekir</span></span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+</nav>
+{% endblock %}

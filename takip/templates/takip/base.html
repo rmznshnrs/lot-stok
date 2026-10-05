@@ -21,7 +21,7 @@
     <a href="{% url 'takip:urunler' %}"{% if aktif == 'urunler' %} class="aktif" aria-current="page"{% endif %}>Ürünler</a>
     <a href="{% url 'takip:parcalar' %}"{% if aktif == 'parcalar' %} class="aktif" aria-current="page"{% endif %}>Parçalar</a>
   </nav>
-  <div class="ust-sag"><a href="{% url 'takip:m_sorgula' %}">Mobil</a> · <a href="{% url 'admin:index' %}">Yönetim</a></div>
+  <div class="ust-sag"><a href="{% url 'takip:m_ana' %}">Mobil</a> · <a href="{% url 'admin:index' %}">Yönetim</a></div>
 </header>
 {% if messages %}
 <div class="mesajlar" role="status">

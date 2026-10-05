@@ -1,0 +1,31 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Parçalar{% endblock %}
+{% block geri %}<a class="m-geri" href="{% url 'takip:m_daha' %}">‹ Daha fazla</a>{% endblock %}
+{% block sayfa_basligi %}Parçalar{% endblock %}
+{% block icerik %}
+<a href="{% url 'takip:m_parca_yeni' %}" class="btn m-btn-buyuk">+ Yeni parça</a>
+<form method="get" class="m-satir" role="search">
+  <input type="search" name="q" value="{{ q }}" class="girdi" placeholder="Kod veya ad ara…" aria-label="Parça ara" enterkeyhint="search">
+  <button type="submit" class="btn btn--ikincil m-btn-orta">Ara</button>
+</form>
+<div class="m-kart-liste">
+  {% for p in parcalar %}
+  {% with urunler=p.urunler.all %}
+  <a href="{% url 'takip:m_stok' %}?parca={{ p.kod|urlencode }}" class="m-oge{% if p.min_altinda %} m-oge--uyari{% endif %}">
+    <span class="baslik-grup">
+      <span class="kalin">{{ p.ad }}{% if p.pk == yeni_pk %} <span class="rozet rozet--kucuk rozet--mavi">yeni</span>{% endif %}</span>
+      <span class="yardim"><span class="mono">{{ p.kod }}</span> · {{ p.lot_sayisi }} lot · min {{ p.min_stok }}</span>
+      <span class="yardim">{% if urunler %}{% for u in urunler %}{{ u.ad }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Henüz hiçbir ürün ağacında yok{% endif %}</span>
+    </span>
+    <span class="m-sag-sayi">
+      <span class="m-buyuk-sayi{% if p.min_altinda %} uyari-metin{% endif %}">{{ p.kullanilabilir_stok }}</span>
+      <span class="yardim{% if p.min_altinda %} uyari-metin{% endif %}">{% if p.min_altinda %}min altında{% else %}{{ p.birim }}{% endif %}</span>
+    </span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+  {% endwith %}
+  {% empty %}
+  <p class="not">{% if q %}“{{ q }}” için parça bulunamadı.{% else %}Henüz parça tanımlanmadı.{% endif %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Ürünler{% endblock %}
+{% block geri %}<a class="m-geri" href="{% url 'takip:m_daha' %}">‹ Daha fazla</a>{% endblock %}
+{% block sayfa_basligi %}Ürünler{% endblock %}
+{% block icerik %}
+<a href="{% url 'takip:m_urun_yeni' %}" class="btn m-btn-buyuk">+ Yeni ürün</a>
+<form method="get" class="m-satir" role="search">
+  <input type="search" name="q" value="{{ q }}" class="girdi" placeholder="Ürün ara…" aria-label="Ürün ara" enterkeyhint="search">
+  <button type="submit" class="btn btn--ikincil m-btn-orta">Ara</button>
+</form>
+<div class="m-kart-liste">
+  {% for u in urunler %}
+  <a href="{% url 'takip:m_urun' u.pk %}" class="m-oge">
+    <span class="baslik-grup">
+      <span class="kalin">{{ u.ad }}</span>
+      <span class="yardim">Kod <span class="mono">{{ u.kod }}</span> · seri öneki <span class="mono">{{ u.seri_oneki }}</span></span>
+      <span class="yardim">{{ u.parca_cesidi }} parça çeşidi · {{ u.uretim_sayisi }} üretildi</span>
+    </span>
+    <span class="m-ok" aria-hidden="true">›</span>
+  </a>
+  {% empty %}
+  <p class="not">{% if q %}“{{ q }}” için ürün bulunamadı.{% else %}Henüz ürün yok.{% endif %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

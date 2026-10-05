@@ -59,19 +59,32 @@ Sanal ortam: .venv (`.venv\Scripts\python manage.py ...`).
 - Ürünler: ürün listesi + ürün ağacı düzenleme
 - Parçalar: parça tanımlama + parça listesi (toplam stok, lot sayısı, kullanıldığı ürünler)
 
-## Mobil (PWA, /m/) (mockup: docs/mockup/Mobile*.dc.html)
-Alt sekme menülü 3 ekran; telefonda ana ekrana eklenebilir. Masaüstüyle aynı
-services.py'yi kullanır, ayrı iş mantığı yoktur.
-- Sorgula (/m/): kamera ile barkod/karekod okutma veya elle giriş; numara
-  numara_ara ile algılanır. Lot → kullanıldığı ürünler ve müşteriler özeti;
-  seri no → içindeki parçalar ve lotlar; parça kodu → stoktaki lotlar.
-- Mal girişi (/m/giris/): parça kod/adla yazılır (parca_bul), lot no kamerayla
-  okutulabilir (Tara), mal_girisi ile kaydedilir.
-- Satış (/m/satis/): müşteri, tarih; seri numaraları okutulur veya elle girilir.
-  Her numara /m/api/seri/ ile (satilabilir_uretim + satis_uyarilari) sayfa
-  yenilemeden kontrol edilir; geri çağrılan lot içeren ürün uyarıyla gösterilir ve
-  onay kutusu işaretlenmeden satış kaydedilmez. Kayıt masaüstüyle ortak
-  views.satis_formu_isle ile yapılır.
+## Mobil uygulama (PWA, /m/) (mockup: docs/mockup/Mobile*.dc.html)
+Masaüstündeki tüm işlevler telefona uygun biçimde /m/ altında; ana ekrana eklenebilir.
+Ayrı iş mantığı yoktur: services.py + masaüstüyle ortak form işleyiciler
+(views.mal_girisi_formu_isle, uretim_kaydet, uretim_baglami, satis_formu_isle,
+urun_formu_isle, urun_listesi, parca_formu_isle, parca_listesi_baglami).
+views_mobil.py yalnızca mobil şablonu ve yönlendirme adresini seçer.
+
+Alt menü 5 sekme:
+1. Ana Sayfa (/m/): arama (kamera + elle; numara_ara → lot/seri izine veya parça
+   stoğuna gider, kısmi eşleşmede adaylar), 3 hızlı işlem, son hareketler.
+2. Stok (/m/stok/): parça kartları (kullanılabilir, sıradaki lot, min uyarısı);
+   parçaya dokununca lotları (FIFO sırası, ?parca=), lota dokununca izlenebilirlik.
+   Mal girişi (/m/stok/giris/): parça kod/adla (parca_bul), lot no kamerayla.
+3. Üretim (/m/uretim/): ürün seçimi, büyük −/+ adet, parça kontrol kartları,
+   eksikte pasif kaydet, verilen seri numaraları.
+4. Satış (/m/satis/): müşteri, seri no okutarak ekleme (/m/api/seri/ ile sayfa
+   yenilemeden kontrol), geri çağrılan lot uyarısı + onay; Satış geçmişi
+   (/m/satis/gecmis/).
+5. Daha fazla (/m/daha/): İzlenebilirlik (/m/izlenebilirlik/: lot → ürün → müşteri,
+   seri no → parçalar, lotu geri çağır / kaldır; geri çağırma views.lot_geri_cagir_view
+   ile, "sonraki" alanıyla mobil sayfaya döner), Ürünler (/m/urunler/, ürün ağacı
+   görüntüleme ve düzenleme), Parçalar (/m/parcalar/, /m/parcalar/yeni/).
+
+Mobil kurallar: tek elle kullanılabilir büyük düğmeler (en az 44 px, ana düğmeler
+52–56 px), listeler kart (.m-oge), mobil şablonlarda tablo yok (yatay kayma olmaz),
+renk ve fontlar V2 ile aynı. Testlerde MobilTemel.mobil_sayfa bunları denetler.
 - Kod: views_mobil.py, templates/takip/mobil/, static/takip/mobil.js.
   Barkod: tarayıcının BarcodeDetector'ı varsa o, yoksa ZXing
   (static/takip/vendor/zxing.min.js, Apache-2.0, projeye kopyalandı).
@@ -103,7 +116,8 @@ lot-takip/
   config/                 settings, urls
   takip/                  models, admin, services, forms, views, views_mobil, urls, tests
     templates/takip/      base.html + ekran şablonları
-      mobil/              mobil base.html, sorgula, giris, satis, cevrimdisi, sw.js
+      mobil/              mobil ekranlar (ana, stok, giris, uretim, satis, satis_gecmis,
+                          daha, izlenebilirlik, urunler, urun, parcalar, parca_yeni), sw.js
     static/takip/style.css   (masaüstü + mobil, tek dosya)
     static/takip/mobil.js    kamera / barkod okuma, satış listesi, SW kaydı
     static/takip/vendor/     zxing.min.js + lisansı

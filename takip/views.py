@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils.http import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views.decorators.http import require_POST
 
 from .forms import (
@@ -106,13 +106,18 @@ def izlenebilirlik(request):
 
 @require_POST
 def lot_geri_cagir_view(request):
+    """Lotu geri çağırır / kaldırır. 'sonraki' verilirse (aynı site içi adres) oraya döner."""
     lot_no = request.POST.get('lot_no', '')
     geri_cagir = request.POST.get('islem') != 'kaldir'
+    sonraki = request.POST.get('sonraki', '')
+    if not url_has_allowed_host_and_scheme(sonraki, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        sonraki = ''
     try:
         lot = lot_geri_cagir(lot_no, geri_cagir)
     except StokLotu.DoesNotExist:
         messages.error(request, f'{lot_no} lotu bulunamadı.')
-        return redirect('takip:izlenebilirlik')
+        return redirect(sonraki or reverse('takip:izlenebilirlik'))
     if geri_cagir:
         messages.warning(
             request, f'{lot.lot_no} geri çağrıldı. Bu lot artık üretimde kullanılmayacak; '
@@ -120,7 +125,8 @@ def lot_geri_cagir_view(request):
         )
     else:
         messages.success(request, f'{lot.lot_no} için geri çağırma kaldırıldı.')
-    return redirect(f"{reverse('takip:izlenebilirlik')}?{urlencode({'lot': lot.lot_no})}")
+    return redirect(sonraki or
+                    f"{reverse('takip:izlenebilirlik')}?{urlencode({'lot': lot.lot_no})}")
 
 
 # --- Satış -------------------------------------------------------------------
@@ -214,34 +220,46 @@ def satis(request):
 
 # --- Stok --------------------------------------------------------------------
 
+def mal_girisi_formu_isle(request, form_sinifi, initial=None):
+    """Mal girişi formunu işler (masaüstü ve mobil ortak).
+
+    (form, lot) döndürür; lot doluysa kayıt yapılmış ve mesajlar eklenmiştir,
+    çağıran yönlendirme yapmalıdır.
+    """
+    if request.method != 'POST':
+        return form_sinifi(initial=initial), None
+    form = form_sinifi(request.POST)
+    if form.is_valid():
+        v = form.cleaned_data
+        try:
+            lot, yeni_tedarikci = mal_girisi(
+                v['parca'], v['tedarikci'], v['lot_no'], v['adet'],
+                v['siparis_tarihi'], v['siparis_no'],
+            )
+        except ValueError as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, _cumle(
+                f'{lot.lot_no} stoğa eklendi: {lot.giris_adet} {lot.parca.birim} '
+                f'{lot.parca.kod} – {lot.parca.ad}'
+            ))
+            if yeni_tedarikci:
+                messages.info(request, _cumle(f'Yeni tedarikçi tanımlandı: {lot.tedarikci.ad}'))
+            return form, lot
+    return form, None
+
+
 def stok(request):
     gorunum = 'parca' if request.GET.get('gorunum') == 'parca' else 'lot'
     q = request.GET.get('q', '').strip()
     parca_kod = request.GET.get('parca', '').strip()
     bitenler = request.GET.get('bitenler') == '1'
 
-    if request.method == 'POST':
-        form = MalGirisiForm(request.POST)
-        if form.is_valid():
-            v = form.cleaned_data
-            try:
-                lot, yeni_tedarikci = mal_girisi(
-                    v['parca'], v['tedarikci'], v['lot_no'], v['adet'],
-                    v['siparis_tarihi'], v['siparis_no'],
-                )
-            except ValueError as hata:
-                form.add_error(None, str(hata))
-            else:
-                messages.success(request, _cumle(
-                    f'{lot.lot_no} stoğa eklendi: {lot.giris_adet} {lot.parca.birim} '
-                    f'{lot.parca.kod} – {lot.parca.ad}'
-                ))
-                if yeni_tedarikci:
-                    messages.info(request, _cumle(f'Yeni tedarikçi tanımlandı: {lot.tedarikci.ad}'))
-                return redirect(f"{reverse('takip:stok')}?{urlencode({'q': lot.lot_no})}")
-    else:
-        secili = Parca.objects.filter(kod__iexact=parca_kod).first() if parca_kod else None
-        form = MalGirisiForm(initial={'parca': secili} if secili else None)
+    secili = Parca.objects.filter(kod__iexact=parca_kod).first() if parca_kod else None
+    form, lot = mal_girisi_formu_isle(request, MalGirisiForm,
+                                      initial={'parca': secili} if secili else None)
+    if lot:
+        return redirect(f"{reverse('takip:stok')}?{urlencode({'q': lot.lot_no})}")
 
     def sekme_url(g):
         parametreler = {'gorunum': g}
@@ -273,26 +291,33 @@ def _uretim_url(urun, adet):
     return f"{reverse('takip:uretim')}?{urlencode({'urun': urun.pk, 'adet': adet})}"
 
 
-def uretim(request):
-    if request.method == 'POST':
-        form = UretimForm(request.POST)
-        if not form.is_valid():
-            messages.error(request, 'Ürün ve 1–999 arası bir adet seçin.')
-            return redirect('takip:uretim')
-        urun, adet = form.cleaned_data['urun'], form.cleaned_data['adet']
-        try:
-            uretimler = uretim_yap(urun, adet)
-        except YetersizStok as hata:
-            eksik = ', '.join(f'{e.parca.kod} ({e.eksik} eksik)' for e in hata.eksikler)
-            messages.error(request, f'Stok yetersiz, üretim kaydedilmedi: {eksik}.')
-        except ValueError as hata:
-            messages.error(request, str(hata))
-        else:
-            request.session['son_uretim'] = {
-                'urun': urun.ad, 'seri_nolar': [u.seri_no for u in uretimler],
-            }
-        return redirect(_uretim_url(urun, adet))
+def uretim_kaydet(request):
+    """Üretim POST'unu işler (masaüstü ve mobil ortak); uretim_yap ile kaydeder.
 
+    Verilen seri numaraları oturuma yazılır (bir sonraki sayfada bir kez gösterilir).
+    (urun, adet) döndürür; form geçersizse (None, None).
+    """
+    form = UretimForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, 'Ürün ve 1–999 arası bir adet seçin.')
+        return None, None
+    urun, adet = form.cleaned_data['urun'], form.cleaned_data['adet']
+    try:
+        uretimler = uretim_yap(urun, adet)
+    except YetersizStok as hata:
+        eksik = ', '.join(f'{e.parca.kod} ({e.eksik} eksik)' for e in hata.eksikler)
+        messages.error(request, f'Stok yetersiz, üretim kaydedilmedi: {eksik}.')
+    except ValueError as hata:
+        messages.error(request, str(hata))
+    else:
+        request.session['son_uretim'] = {
+            'urun': urun.ad, 'seri_nolar': [u.seri_no for u in uretimler],
+        }
+    return urun, adet
+
+
+def uretim_baglami(request):
+    """Üretim ekranı bağlamı (masaüstü ve mobil ortak): ürün, adet, uretim_onizle sonucu."""
     q = request.GET.get('q', '').strip()
     urunler = Urun.objects.annotate(parca_cesidi=Count('agac')).order_by('kod')
     if q:
@@ -314,8 +339,7 @@ def uretim(request):
     if onizleme:
         atlanan = sorted({l.lot_no for p in onizleme.parcalar for l in p.atlanan_lotlar})
 
-    return render(request, 'takip/uretim.html', {
-        'aktif': 'uretim',
+    return {
         'urunler': urunler,
         'urun': urun,
         'adet': adet,
@@ -325,29 +349,50 @@ def uretim(request):
         'hata': hata,
         'atlanan_lotlar': atlanan,
         'son_uretim': request.session.pop('son_uretim', None),
-    })
+    }
+
+
+def uretim(request):
+    if request.method == 'POST':
+        urun, adet = uretim_kaydet(request)
+        if urun is None:
+            return redirect('takip:uretim')
+        return redirect(_uretim_url(urun, adet))
+    return render(request, 'takip/uretim.html', {**uretim_baglami(request), 'aktif': 'uretim'})
 
 
 # --- Parçalar ----------------------------------------------------------------
 
-def parcalar(request):
+def parca_formu_isle(request):
+    """Yeni parça formunu işler (masaüstü ve mobil ortak). (form, kaydedilen parça) döndürür."""
     form = ParcaForm(request.POST or None)
     if request.method == 'POST' and form.is_valid():
         parca = form.save()
         messages.success(request, f'{parca.kod} – {parca.ad} kaydedildi.')
-        return redirect(f"{reverse('takip:parcalar')}?yeni={parca.pk}")
+        return form, parca
+    return form, None
 
+
+def parca_listesi_baglami(request):
+    """Parça listesi (stok alanlarıyla), arama ve yeni eklenen parça (masaüstü ve mobil ortak)."""
     q = request.GET.get('q', '').strip()
     qs = Parca.objects.prefetch_related('urunler')
     if q:
         qs = qs.filter(Q(kod__icontains=q) | Q(ad__icontains=q))
     yeni = request.GET.get('yeni', '')
-    return render(request, 'takip/parcalar.html', {
-        'aktif': 'parcalar',
-        'form': form,
+    return {
         'parcalar': parca_stoklari(qs).order_by('kod'),
         'q': q,
         'yeni_pk': int(yeni) if yeni.isdigit() else None,
+    }
+
+
+def parcalar(request):
+    form, parca = parca_formu_isle(request)
+    if parca:
+        return redirect(f"{reverse('takip:parcalar')}?yeni={parca.pk}")
+    return render(request, 'takip/parcalar.html', {
+        **parca_listesi_baglami(request), 'aktif': 'parcalar', 'form': form,
     })
 
 
@@ -360,8 +405,12 @@ def urunler(request):
     return redirect('takip:urun', pk=ilk.pk)
 
 
-def urun_duzenle(request, pk=None):
-    urun = get_object_or_404(Urun, pk=pk) if pk else None
+def urun_formu_isle(request, urun):
+    """Ürün ve ürün ağacı formunu işler (masaüstü ve mobil ortak).
+
+    Kaydedilirse {'kaydedilen': urun} döner (mesajlar eklenmiştir, çağıran
+    yönlendirme yapmalıdır); yoksa şablon bağlamı döner.
+    """
     veri = request.POST if request.method == 'POST' else None
     form = UrunForm(veri, instance=urun)
     formset = UrunAgaciFormSet(
@@ -396,24 +445,36 @@ def urun_duzenle(request, pk=None):
                 messages.success(request, f'{yeni_parca.kod} ürün ağacına eklendi.')
             else:
                 messages.success(request, f'{urun.ad} kaydedildi.')
-            return redirect('takip:urun', pk=urun.pk)
+            return {'kaydedilen': urun}
 
     stoklar = {p.pk: p for p in parca_stoklari().order_by('kod')}
-    satirlar = [(f, stoklar.get(f.instance.parca_id)) for f in formset.forms]
-
-    q = request.GET.get('q', '').strip()
-    liste = Urun.objects.order_by('kod')
-    if q:
-        liste = liste.filter(Q(kod__icontains=q) | Q(ad__icontains=q))
-
-    return render(request, 'takip/urunler.html', {
-        'aktif': 'urunler',
+    return {
+        'kaydedilen': None,
         'urun': urun,
-        'urunler': liste,
-        'q': q,
         'form': form,
         'formset': formset,
-        'satirlar': satirlar,
+        'satirlar': [(f, stoklar.get(f.instance.parca_id)) for f in formset.forms],
         'yeni_satir': yeni_satir,
         'parcalar': stoklar.values(),
+    }
+
+
+def urun_listesi(q=''):
+    """Ürünler; parça çeşidi ve üretim sayısıyla (masaüstü ve mobil ortak)."""
+    liste = Urun.objects.annotate(
+        parca_cesidi=Count('agac', distinct=True), uretim_sayisi=Count('uretimler', distinct=True),
+    ).order_by('kod')
+    if q:
+        liste = liste.filter(Q(kod__icontains=q) | Q(ad__icontains=q))
+    return liste
+
+
+def urun_duzenle(request, pk=None):
+    urun = get_object_or_404(Urun, pk=pk) if pk else None
+    baglam = urun_formu_isle(request, urun)
+    if baglam['kaydedilen']:
+        return redirect('takip:urun', pk=baglam['kaydedilen'].pk)
+    q = request.GET.get('q', '').strip()
+    return render(request, 'takip/urunler.html', {
+        **baglam, 'aktif': 'urunler', 'urunler': urun_listesi(q), 'q': q,
     })

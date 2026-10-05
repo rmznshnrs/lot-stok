@@ -1016,23 +1016,54 @@ class ParcaBulTest(TemelVeri):
             services.parca_bul('  ')
 
 
-class MobilOrtakTest(TestCase):
-    def test_ekranlar_acilir_ve_alt_menu(self):
-        for ad, aktif in (('m_sorgula', 'Sorgula'), ('m_giris', 'Mal girişi'),
-                          ('m_satis', 'Satış')):
+MOBIL_SEKMELER = ('Ana Sayfa', 'Stok', 'Üretim', 'Satış', 'Daha fazla')
+
+
+class MobilTemel(TemelVeri):
+    """Mobil ekran testleri için ortak kontroller."""
+
+    def mobil_sayfa(self, yanit, aktif_sekme):
+        self.assertEqual(yanit.status_code, 200)
+        html = yanit.content.decode()
+        self.assertIn('<body class="mobil">', html)
+        # 5 sekmeli alt menü, doğru sekme seçili
+        menu = html.split('<nav class="m-alt-menu"')[1].split('</nav>')[0]
+        for sekme in MOBIL_SEKMELER:
+            self.assertIn(sekme, menu)
+        self.assertRegex(menu, rf'class="aktif" aria-current="page">\s*<svg[^>]*>.*?</svg>\s*{aktif_sekme}')
+        self.assertEqual(menu.count('class="aktif"'), 1)
+        # Telefonda tablo yok (yatay kaymasın), yer tutucu kalmasın
+        icerik = html.split('<main class="m-icerik">')[1].split('</main>')[0]
+        self.assertNotIn('<table', icerik)
+        self.assertNotIn('[', icerik)
+        return html
+
+
+class MobilOrtakTest(MobilTemel):
+    def test_tum_ekranlar_acilir(self):
+        services.uretim_yap(self.urun, 1)
+        sayfalar = (
+            ('m_ana', {}, 'Ana Sayfa'), ('m_stok', {}, 'Stok'), ('m_giris', {}, 'Stok'),
+            ('m_uretim', {}, 'Üretim'), ('m_satis', {}, 'Satış'),
+            ('m_satis_gecmis', {}, 'Satış'), ('m_daha', {}, 'Daha fazla'),
+            ('m_iz', {}, 'Daha fazla'), ('m_urunler', {}, 'Daha fazla'),
+            ('m_urun_yeni', {}, 'Daha fazla'), ('m_parcalar', {}, 'Daha fazla'),
+            ('m_parca_yeni', {}, 'Daha fazla'), ('m_cevrimdisi', {}, None),
+        )
+        for ad, args, sekme in sayfalar:
             with self.subTest(ad=ad):
-                yanit = self.client.get(reverse(f'takip:{ad}'))
-                self.assertEqual(yanit.status_code, 200)
-                self.assertContains(yanit, 'class="mobil"')
-                self.assertContains(yanit, 'class="m-alt-menu"')
-                self.assertContains(yanit, 'class="aktif" aria-current="page">')
-                self.assertRegex(yanit.content.decode(),
-                                 rf'class="aktif" aria-current="page">\s*<svg[^>]*>.*</svg>\s*{aktif}')
-                self.assertContains(yanit, 'rel="manifest" href="/m/manifest.json"')
-                self.assertContains(yanit, 'rel="apple-touch-icon"')
-                self.assertContains(yanit, 'takip/vendor/zxing.min.js')
-                self.assertContains(yanit, 'data-sw-url="/m/sw.js"')
-                self.assertNotIn('[', yanit.content.decode().split('<nav class="m-alt-menu"')[0])
+                yanit = self.client.get(reverse(f'takip:{ad}', kwargs=args))
+                if sekme:
+                    html = self.mobil_sayfa(yanit, sekme)
+                else:
+                    self.assertEqual(yanit.status_code, 200)
+                    html = yanit.content.decode()
+                self.assertIn('rel="manifest" href="/m/manifest.json"', html)
+                self.assertIn('rel="apple-touch-icon"', html)
+                self.assertIn('takip/vendor/zxing.min.js', html)
+                self.assertIn('data-sw-url="/m/sw.js"', html)
+        self.mobil_sayfa(self.client.get(reverse('takip:m_urun', args=[self.urun.pk])),
+                         'Daha fazla')
 
     def test_manifest(self):
         yanit = self.client.get(reverse('takip:m_manifest'))
@@ -1044,6 +1075,8 @@ class MobilOrtakTest(TestCase):
         boyutlar = {(i['sizes'], i.get('purpose', 'any')) for i in m['icons']}
         self.assertEqual(boyutlar, {('192x192', 'any'), ('512x512', 'any'),
                                     ('512x512', 'maskable')})
+        self.assertEqual([k['url'] for k in m['shortcuts']],
+                         ['/m/stok/giris/', '/m/uretim/', '/m/satis/'])
 
     def test_ikon_dosyalari_gercek_boyutta(self):
         import struct
@@ -1065,7 +1098,6 @@ class MobilOrtakTest(TestCase):
         self.assertIn('style.css', js)
         self.assertIn("if (istek.method !== 'GET') return;", js)  # POST önbelleğe alınmaz
         self.assertRegex(js, r"const ONBELLEK = 'lot-takip-[0-9a-f]{12}'")
-        self.assertEqual(self.client.get(reverse('takip:m_cevrimdisi')).status_code, 200)
 
     def test_sw_surumu_dosya_degisince_degisir(self):
         import os
@@ -1085,72 +1117,93 @@ class MobilOrtakTest(TestCase):
         self.assertContains(self.client.get(reverse('takip:parcalar')), 'href="/m/">Mobil</a>')
 
 
-class MobilSorgulaTest(TemelVeri):
-    url = reverse_lazy('takip:m_sorgula')
+class MobilAnaSayfaTest(MobilTemel):
+    url = reverse_lazy('takip:m_ana')
 
     def setUp(self):
         super().setUp()
-        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
-        services.satis_yap(self.musteri, ['SN-IP-0001'], tarih=date(2026, 5, 12))
+        services.uretim_yap(self.urun, 2)
+        services.satis_yap(self.musteri, ['SN-IP-0001'])
 
-    def test_bos(self):
-        yanit = self.client.get(self.url)
-        self.assertContains(yanit, 'Kamerayı aç')
-        self.assertContains(yanit, 'veya elle girin')
-        self.assertNotContains(yanit, 'm-kamera--kucuk')
+    def test_ekran(self):
+        html = self.mobil_sayfa(self.client.get(self.url), 'Ana Sayfa')
+        self.assertIn('data-tara-hedef="m-q" data-tara-gonder', html)  # kamera ile ara
+        for metin in ('Mal girişi yap', 'Ürün üret', 'Satış kaydet', 'Son hareketler'):
+            self.assertIn(metin, html)
+        for adres in ('/m/stok/giris/', '/m/uretim/', '/m/satis/'):
+            self.assertIn(f'href="{adres}" class="m-hizli-kart"', html)
+        self.assertIn('İndikatör Paneli · 2 adet', html)          # üretim hareketi
+        self.assertIn('?sekme=seri&amp;seri=SN-IP-0001', html)    # harekete dokununca iz
 
-    def test_lot_ozeti(self):
-        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
-        yanit = self.client.get(self.url, {'q': 'l-d-eski'})
-        self.assertEqual(yanit.context['sonuc']['tur'], 'lot')
-        self.assertContains(yanit, 'm-kamera--kucuk')
-        self.assertContains(yanit, 'rozet rozet--uyari">Geri çağrıldı')
-        self.assertContains(yanit, '3 seri no')
-        self.assertContains(yanit, '1 müşteri')
-        self.assertContains(yanit, 'Atlas')
-        self.assertContains(yanit, 'Depodaki ürünler (2)')
-        self.assertContains(yanit, 'sevkiyattan önce ayrılmalı')
-        self.assertContains(yanit, '/izlenebilirlik/?lot=L-D-ESKI')
-
-    def test_seri_parcalari(self):
-        yanit = self.client.get(self.url, {'q': 'sn-ip-0001'})
-        self.assertEqual(yanit.context['sonuc']['tur'], 'seri')
-        self.assertContains(yanit, 'rozet rozet--uyari">Satıldı')
-        self.assertContains(yanit, 'Atlas · 12.05.2026')
-        self.assertContains(yanit, 'L-D-ESKI')
-        self.assertContains(yanit, '4 adet')  # LED
-        self.assertContains(yanit, '?q=L-LED')  # lota dokununca lot sorgusu
-
-    def test_parca_kodu(self):
-        yanit = self.client.get(self.url, {'q': 'DIY'})
-        self.assertEqual(yanit.context['sonuc']['tur'], 'parca')
-        self.assertNotContains(yanit, 'L-D-ESKI')  # 4 üretimde bitti, biten lot gösterilmez
-        self.assertContains(yanit, 'L-D-YENI <span class="lot-etiket">· sıradaki</span>')
-        self.assertContains(yanit, '· geri çağrıldı')  # L-D-GERI
+    def test_arama_yonlendirir(self):
+        iz = reverse('takip:m_iz')
+        self.assertRedirects(self.client.get(self.url, {'q': 'l-d-eski'}), f'{iz}?lot=L-D-ESKI')
+        self.assertRedirects(self.client.get(self.url, {'q': 'sn-ip-0002'}),
+                             f'{iz}?sekme=seri&seri=SN-IP-0002')
+        self.assertRedirects(self.client.get(self.url, {'q': 'led'}),
+                             f"{reverse('takip:m_stok')}?parca=LED")
 
     def test_aday_ve_bulunamadi(self):
-        self.assertContains(self.client.get(self.url, {'q': 'SN-IP'}), 'birebir eşleşmedi')
+        html = self.mobil_sayfa(self.client.get(self.url, {'q': 'SN-IP'}), 'Ana Sayfa')
+        self.assertIn('birebir eşleşmedi', html)
+        self.assertIn('SN-IP-0002', html)
         self.assertContains(self.client.get(self.url, {'q': 'XYZ'}), 'bulunamadı')
 
 
-class MobilGirisTest(TemelVeri):
+class MobilStokTest(MobilTemel):
+    url = reverse_lazy('takip:m_stok')
+
+    def test_parca_kartlari(self):
+        self.diyot.min_stok = 20
+        self.diyot.save()
+        html = self.mobil_sayfa(self.client.get(self.url), 'Stok')
+        self.assertIn('sekme sekme--aktif" aria-current="page">Stok listesi', html)
+        self.assertIn('href="?parca=DIY" class="m-oge m-oge--uyari"', html)  # min altında
+        self.assertIn('Sıradaki: <span class="mono">L-D-ESKI</span>', html)
+        self.assertIn('toplam 63', html)  # geri çağrılan dahil toplam
+
+    def test_arama(self):
+        yanit = self.client.get(self.url, {'q': 'eski'})
+        self.assertEqual([g['parca'].kod for g in yanit.context['gruplar']], ['DIY'])
+
+    def test_parca_detayi_lotlar(self):
+        html = self.mobil_sayfa(self.client.get(self.url, {'parca': 'diy'}), 'Stok')
+        self.assertIn('‹ Stok', html)
+        self.assertIn('href="/m/stok/giris/?parca=DIY"', html)
+        # FIFO sırası, sıradaki ve geri çağrılan etiketleri; lota dokununca iz
+        self.assertLess(html.index('L-D-GERI'), html.index('L-D-ESKI'))
+        self.assertLess(html.index('L-D-ESKI'), html.index('L-D-YENI'))
+        self.assertIn('L-D-ESKI <span class="lot-etiket">· sıradaki</span>', html)
+        self.assertIn('<span class="lot-etiket lot-etiket--uyari">· geri çağrıldı</span>', html)
+        self.assertIn('href="/m/izlenebilirlik/?lot=L-D-YENI"', html)
+
+    def test_biten_lotlar(self):
+        services.uretim_yap(self.urun, 3)  # L-D-ESKI biter
+        self.assertNotContains(self.client.get(self.url, {'parca': 'DIY'}), 'L-D-ESKI')
+        self.assertContains(self.client.get(self.url, {'parca': 'DIY', 'bitenler': '1'}),
+                            '· bitti')
+
+
+class MobilGirisTest(MobilTemel):
     url = reverse_lazy('takip:m_giris')
 
     def test_ekran(self):
-        yanit = self.client.get(self.url)
-        self.assertContains(yanit, 'Depoya mal girişi')
-        self.assertContains(yanit, 'data-tara-hedef="id_lot_no"')
-        self.assertContains(yanit, '<option value="DIY">Diyot</option>')
+        html = self.mobil_sayfa(self.client.get(self.url, {'parca': 'DIY'}), 'Stok')
+        self.assertIn('sekme sekme--aktif" aria-current="page">Mal girişi', html)
+        self.assertIn('data-tara-hedef="id_lot_no"', html)
+        self.assertIn('<option value="DIY">Diyot</option>', html)
+        self.assertIn('value="DIY"', html)  # parça detayından gelince dolu
 
     def test_parca_adiyla_kaydet(self):
         yanit = self.client.post(self.url, {
             'parca': 'diyot', 'tedarikci': 'Tedarikçi A', 'lot_no': ' L-D-MOBIL ',
             'adet': 12, 'siparis_tarihi': '2026-09-20', 'siparis_no': 'IRS-1',
         }, follow=True)
-        self.assertRedirects(yanit, self.url)
+        self.assertRedirects(yanit, f"{reverse('takip:m_stok')}?parca=DIY")
         lot = StokLotu.objects.get(lot_no='L-D-MOBIL')
         self.assertEqual((lot.parca, lot.kalan_adet, lot.siparis_no), (self.diyot, 12, 'IRS-1'))
-        self.assertContains(yanit, 'L-D-MOBIL kaydedildi: 12 adet Diyot.')
+        self.assertContains(yanit, 'L-D-MOBIL stoğa eklendi: 12 adet DIY – Diyot.')
+        self.assertContains(yanit, 'L-D-MOBIL')  # parça detayında yeni lot görünür
 
     def test_hatalar(self):
         yanit = self.client.post(self.url, {
@@ -1162,7 +1215,48 @@ class MobilGirisTest(TemelVeri):
         self.assertEqual(StokLotu.objects.count(), 4)
 
 
-class MobilSatisTest(TemelVeri):
+class MobilUretimTest(MobilTemel):
+    url = reverse_lazy('takip:m_uretim')
+
+    def test_onizleme(self):
+        html = self.mobil_sayfa(self.client.get(self.url, {'urun': self.urun.pk, 'adet': 5}),
+                                'Üretim')
+        self.assertIn('data-adim="-1"', html)
+        self.assertIn('data-adim="1"', html)
+        self.assertIn('L-D-ESKI × 3 · L-D-YENI × 2', html)
+        self.assertIn('SN-IP-0001 … SN-IP-0005', html)
+        self.assertIn('rozet rozet--basari">Yeterli', html)
+        self.assertIn('L-D-GERI</span>) otomatik olarak atlanır', html)
+        self.assertIn('<button type="submit" class="btn m-btn-buyuk">5 adet üret ve kaydet', html)
+
+    def test_eksik_buton_pasif(self):
+        html = self.mobil_sayfa(self.client.get(self.url, {'urun': self.urun.pk, 'adet': 14}),
+                                'Üretim')
+        self.assertIn('rozet rozet--uyari">1 eksik', html)
+        self.assertIn('Eksik parça var', html)
+        self.assertIn('class="btn m-btn-buyuk" disabled', html)
+
+    def test_kaydet_ve_seri_numaralari(self):
+        yanit = self.client.post(self.url, {'urun': self.urun.pk, 'adet': 2})
+        self.assertRedirects(yanit, f'{self.url}?urun={self.urun.pk}&adet=2',
+                             fetch_redirect_response=False)
+        self.assertEqual(Uretim.objects.count(), 2)
+        html = self.mobil_sayfa(self.client.get(yanit.url), 'Üretim')
+        self.assertIn('Üretim kaydedildi: 2 adet İndikatör Paneli', html)
+        self.assertIn('href="/m/izlenebilirlik/?sekme=seri&amp;seri=SN-IP-0002"', html)
+
+    def test_yetersiz_ve_gecersiz(self):
+        yanit = self.client.post(self.url, {'urun': self.urun.pk, 'adet': 14}, follow=True)
+        self.assertContains(yanit, 'Stok yetersiz, üretim kaydedilmedi')
+        self.assertRedirects(self.client.post(self.url, {'adet': 0}), self.url)
+        self.assertEqual(Uretim.objects.count(), 0)
+
+    def test_urun_yoksa(self):
+        Urun.objects.all().delete()
+        self.assertContains(self.client.get(self.url), 'href="/m/urunler/yeni/"')
+
+
+class MobilSatisTest(MobilTemel):
     url = reverse_lazy('takip:m_satis')
     api = reverse_lazy('takip:m_seri_kontrol')
 
@@ -1185,11 +1279,11 @@ class MobilSatisTest(TemelVeri):
         self.assertEqual(self.client.post(self.api, {'no': 'SN-IP-0001'}).status_code, 405)
 
     def test_ekran(self):
-        yanit = self.client.get(self.url)
-        self.assertContains(yanit, 'id="m-seri-tara"')
-        self.assertContains(yanit, 'data-kontrol-url="/m/api/seri/"')
-        self.assertContains(yanit, '<template id="m-sepet-sablon">')
-        self.assertContains(yanit, '0 ürün')
+        html = self.mobil_sayfa(self.client.get(self.url), 'Satış')
+        self.assertIn('sekme sekme--aktif" aria-current="page">Yeni satış', html)
+        self.assertIn('id="m-seri-tara"', html)
+        self.assertIn('data-kontrol-url="/m/api/seri/"', html)
+        self.assertIn('<template id="m-sepet-sablon">', html)
 
     def test_javascriptsiz_ekle_ve_kaydet(self):
         veri = {'musteri': 'Atlas', 'tarih': '2026-06-01'}
@@ -1209,9 +1303,172 @@ class MobilSatisTest(TemelVeri):
         yanit = self.client.post(self.url, veri)
         self.assertContains(yanit, 'm-sepet-oge m-sepet-oge--uyari')
         self.assertContains(yanit, 'Geri çağrılan lot içeriyor (L-D-ESKI)')
-        self.assertRegex(yanit.content.decode(), r'<label id="m-onay"[^>]*>')
         self.assertNotRegex(yanit.content.decode(), r'<label id="m-onay"[^>]*hidden')
         self.assertEqual(Satis.objects.count(), 0)
         yanit = self.client.post(self.url, {**veri, 'onay': '1'}, follow=True)
         self.assertEqual(Satis.objects.count(), 1)
         self.assertContains(yanit, 'SN-IP-0001 geri çağrılan lot içeriyor: L-D-ESKI.')
+
+    def test_satis_gecmisi(self):
+        services.satis_yap(self.musteri, ['SN-IP-0002', 'SN-IP-0001'], tarih=date(2026, 5, 1))
+        url = reverse('takip:m_satis_gecmis')
+        html = self.mobil_sayfa(self.client.get(url), 'Satış')
+        self.assertIn('sekme sekme--aktif" aria-current="page">Satış geçmişi', html)
+        self.assertIn('Atlas', html)
+        self.assertIn('01.05.2026', html)
+        self.assertIn('İndikatör Paneli · 2 adet', html)
+        self.assertIn('?sekme=seri&amp;seri=SN-IP-0001', html)
+        self.assertEqual(len(self.client.get(url, {'q': 'zzz'}).context['gecmis']), 0)
+
+
+class MobilIzlenebilirlikTest(MobilTemel):
+    url = reverse_lazy('takip:m_iz')
+
+    def setUp(self):
+        super().setUp()
+        services.uretim_yap(self.urun, 4)  # 0001-0003 L-D-ESKI, 0004 L-D-YENI
+        self.musteri.iletisim = 'atlas@ornek.example'
+        self.musteri.save()
+        services.satis_yap(self.musteri, ['SN-IP-0001'], tarih=date(2026, 5, 12))
+
+    def test_bos_ve_bulunamadi(self):
+        html = self.mobil_sayfa(self.client.get(self.url), 'Daha fazla')
+        self.assertIn('data-tara-hedef="m-iz-q" data-tara-gonder', html)
+        self.assertContains(self.client.get(self.url, {'lot': 'YOK'}), 'bulunamadı')
+        self.assertContains(self.client.get(self.url, {'sekme': 'seri', 'seri': 'YOK'}),
+                            'bulunamadı')
+
+    def test_lot_urun_musteri(self):
+        html = self.mobil_sayfa(self.client.get(self.url, {'lot': 'l-d-eski'}), 'Daha fazla')
+        self.assertIn('<strong>3</strong> üründe kullanıldı', html)
+        self.assertIn('<strong>1</strong> müşteriye ulaştı', html)
+        self.assertIn('<strong>2</strong> ürün depoda', html)
+        self.assertIn('atlas@ornek.example', html)
+        self.assertIn('SN-IP-0001 · 12.05.2026', html)
+        self.assertEqual(html.count('rozet rozet--uyari">Satıldı'), 1)
+        self.assertEqual(html.count('rozet rozet--basari">Depoda'), 2)
+        self.assertIn('Bu lotu geri çağır', html)
+        self.assertIn('name="sonraki" value="/m/izlenebilirlik/?lot=l-d-eski"', html)
+
+    def test_seri_parcalar(self):
+        StokLotu.objects.filter(pk=self.diyot_eski.pk).update(geri_cagrildi=True)
+        html = self.mobil_sayfa(
+            self.client.get(self.url, {'sekme': 'seri', 'seri': 'sn-ip-0001'}), 'Daha fazla')
+        self.assertIn('SN-IP-0001', html)
+        self.assertIn('Atlas · 12.05.2026', html)
+        self.assertIn('Bu üründe geri çağrılan 1 lot var.', html)
+        self.assertIn('href="?lot=L-D-ESKI" class="m-oge m-oge--uyari"', html)
+        self.assertIn('href="?lot=L-LED"', html)
+
+    def test_geri_cagir_mobilde_kalir(self):
+        sonraki = f'{self.url}?lot=L-D-ESKI'
+        yanit = self.client.post(reverse('takip:lot_geri_cagir'),
+                                 {'lot_no': 'L-D-ESKI', 'sonraki': sonraki}, follow=True)
+        self.assertRedirects(yanit, sonraki)
+        self.assertTrue(StokLotu.objects.get(pk=self.diyot_eski.pk).geri_cagrildi)
+        self.assertContains(yanit, 'L-D-ESKI geri çağrıldı')
+        self.assertContains(yanit, 'Geri çağırmayı kaldır')
+        self.assertContains(yanit, 'sevkiyattan önce ayrılmalı')
+
+    def test_geri_cagir_disari_yonlendirmez(self):
+        yanit = self.client.post(reverse('takip:lot_geri_cagir'),
+                                 {'lot_no': 'L-D-ESKI', 'sonraki': 'https://kotu.example/'})
+        self.assertRedirects(yanit, f"{reverse('takip:izlenebilirlik')}?lot=L-D-ESKI",
+                             fetch_redirect_response=False)
+
+
+class MobilDahaFazlaTest(MobilTemel):
+    def test_menu(self):
+        html = self.mobil_sayfa(self.client.get(reverse('takip:m_daha')), 'Daha fazla')
+        for adres in ('/m/izlenebilirlik/', '/m/urunler/', '/m/parcalar/', '/admin/'):
+            self.assertIn(f'href="{adres}"', html)
+
+
+class MobilUrunlerTest(MobilTemel):
+    def post_verisi(self, **ek):
+        satirlar = list(self.urun.agac.order_by('parca__kod'))
+        veri = {
+            'ad': self.urun.ad, 'kod': self.urun.kod, 'seri_oneki': self.urun.seri_oneki,
+            'agac-TOTAL_FORMS': len(satirlar), 'agac-INITIAL_FORMS': len(satirlar),
+            'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+            'yeni_parca': '', 'yeni_adet': '',
+        }
+        for i, s in enumerate(satirlar):
+            veri.update({f'agac-{i}-id': s.pk, f'agac-{i}-parca': s.parca_id,
+                         f'agac-{i}-adet': s.adet})
+        veri.update(ek)
+        return veri
+
+    def agac(self):
+        return dict(self.urun.agac.values_list('parca__kod', 'adet'))
+
+    def test_liste(self):
+        services.uretim_yap(self.urun, 2)
+        html = self.mobil_sayfa(self.client.get(reverse('takip:m_urunler')), 'Daha fazla')
+        self.assertIn('href="/m/urunler/yeni/"', html)
+        self.assertIn(f'href="/m/urunler/{self.urun.pk}/" class="m-oge"', html)
+        self.assertIn('2 parça çeşidi · 2 üretildi', html)
+        self.assertEqual(len(self.client.get(reverse('takip:m_urunler'),
+                                             {'q': 'zzz'}).context['urunler']), 0)
+
+    def test_agac_goruntule(self):
+        url = reverse('takip:m_urun', args=[self.urun.pk])
+        html = self.mobil_sayfa(self.client.get(url), 'Daha fazla')
+        self.assertEqual(html.count('class="m-oge m-agac-satiri"'), 2)
+        self.assertIn('name="agac-0-DELETE"', html)
+        self.assertIn(f'href="/m/uretim/?urun={self.urun.pk}"', html)
+
+    def test_agac_duzenle(self):
+        url = reverse('takip:m_urun', args=[self.urun.pk])
+        # Sıra: DIY (0), LED (1). LED 6 yap, DIY kaldır, adıyla yeni parça ekle.
+        Parca.objects.create(kod='PCB', ad='Elektronik kart')
+        yanit = self.client.post(url, self.post_verisi(**{
+            'agac-1-adet': 6, 'agac-0-DELETE': 'on',
+            'yeni_parca': 'elektronik kart', 'yeni_adet': 1, 'islem': 'ekle'}))
+        self.assertRedirects(yanit, url)
+        self.assertEqual(self.agac(), {'LED': 6, 'PCB': 1})
+
+    def test_hata_kaydetmez(self):
+        url = reverse('takip:m_urun', args=[self.urun.pk])
+        yanit = self.client.post(url, self.post_verisi(**{'agac-1-adet': 0}))
+        self.assertEqual(yanit.status_code, 200)
+        self.assertEqual(self.agac(), {'DIY': 1, 'LED': 4})
+
+    def test_yeni_urun(self):
+        yanit = self.client.post(reverse('takip:m_urun_yeni'), {
+            'ad': 'Röle Kartı', 'kod': 'RK', 'seri_oneki': 'SN-RK-',
+            'agac-TOTAL_FORMS': 0, 'agac-INITIAL_FORMS': 0,
+            'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+            'yeni_parca': 'DIY', 'yeni_adet': 2,
+        })
+        urun = Urun.objects.get(kod='RK')
+        self.assertRedirects(yanit, reverse('takip:m_urun', args=[urun.pk]))
+        self.assertEqual(list(urun.agac.values_list('parca__kod', 'adet')), [('DIY', 2)])
+
+
+class MobilParcalarTest(MobilTemel):
+    def test_liste(self):
+        self.diyot.min_stok = 20
+        self.diyot.save()
+        html = self.mobil_sayfa(self.client.get(reverse('takip:m_parcalar')), 'Daha fazla')
+        self.assertIn('href="/m/parcalar/yeni/"', html)
+        self.assertIn('href="/m/stok/?parca=DIY" class="m-oge m-oge--uyari"', html)
+        self.assertIn('min altında', html)
+        self.assertIn('İndikatör Paneli', html)  # kullanıldığı ürün
+        yanit = self.client.get(reverse('takip:m_parcalar'), {'q': 'led'})
+        self.assertEqual([p.kod for p in yanit.context['parcalar']], ['LED'])
+
+    def test_yeni_parca(self):
+        url = reverse('takip:m_parca_yeni')
+        self.mobil_sayfa(self.client.get(url), 'Daha fazla')
+        yanit = self.client.post(url, {'kod': 'STM32', 'ad': 'Mikrodenetleyici',
+                                       'birim': 'adet', 'min_stok': 5}, follow=True)
+        parca = Parca.objects.get(kod='STM32')
+        self.assertRedirects(yanit, f"{reverse('takip:m_parcalar')}?yeni={parca.pk}")
+        self.assertContains(yanit, 'STM32 – Mikrodenetleyici kaydedildi.')
+        self.assertContains(yanit, 'rozet--mavi">yeni')
+
+    def test_ayni_kod_hata(self):
+        yanit = self.client.post(reverse('takip:m_parca_yeni'),
+                                 {'kod': 'diy', 'ad': 'X', 'birim': 'adet', 'min_stok': 0})
+        self.assertContains(yanit, 'Bu kodla bir parça zaten var.')

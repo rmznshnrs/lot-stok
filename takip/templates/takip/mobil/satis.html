@@ -1,7 +1,8 @@
 {% extends 'takip/mobil/base.html' %}
 {% block baslik %}Satış{% endblock %}
-{% block sayfa_basligi %}Satış kaydı{% endblock %}
+{% block sayfa_basligi %}Satış{% endblock %}
 {% block icerik %}
+{% include 'takip/mobil/_satis_sekmeler.html' %}
 <form method="post" id="m-satis-formu" class="m-form" data-kontrol-url="{% url 'takip:m_seri_kontrol' %}" novalidate>
   {% csrf_token %}
   <div class="alan">

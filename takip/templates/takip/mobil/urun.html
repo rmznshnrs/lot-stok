@@ -1,0 +1,65 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}{% if urun %}{{ urun.ad }}{% else %}Yeni ürün{% endif %}{% endblock %}
+{% block geri %}<a class="m-geri" href="{% url 'takip:m_urunler' %}">‹ Ürünler</a>{% endblock %}
+{% block sayfa_basligi %}{% if urun %}{{ urun.ad }}{% else %}Yeni ürün{% endif %}{% endblock %}
+{% block icerik %}
+<form method="post" class="m-form" novalidate>
+  {% csrf_token %}
+  {% for e in form.non_field_errors %}<div class="mesaj mesaj--error">{{ e }}</div>{% endfor %}
+  {% for alan in form %}
+  <div class="alan">
+    <label for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+    {{ alan }}
+    {% if alan.help_text %}<span class="yardim">{{ alan.help_text }}</span>{% endif %}
+    {% for e in alan.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+  {% endfor %}
+
+  <div class="baslik-grup">
+    <h2 class="m-bolum-baslik">Ürün ağacı</h2>
+    <span class="yardim">1 adet ürün için hangi parçadan kaç adet kullanılır</span>
+  </div>
+  {{ formset.management_form }}
+  {% for e in formset.non_form_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+  <div class="m-kart-liste">
+    {% for f, p in satirlar %}
+    <div class="m-oge m-agac-satiri">
+      {{ f.id }}{{ f.parca }}
+      <span class="baslik-grup">
+        <span class="kalin">{{ p.ad }}</span>
+        <span class="yardim"><span class="mono">{{ p.kod }}</span> · stokta <span{% if p.min_altinda %} class="uyari-metin"{% endif %}>{{ p.kullanilabilir_stok }}</span></span>
+        {% for e in f.adet.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+        {% for e in f.non_field_errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </span>
+      <label class="m-adet-alan"><span class="gorunmez">{{ p.kod }} adedi</span>{{ f.adet }}</label>
+      <label class="m-kaldir" title="Kaydet ile uygulanır">
+        <input type="checkbox" name="{{ f.DELETE.html_name }}" class="gorunmez"{% if f.DELETE.value %} checked{% endif %}>
+        <span aria-hidden="true">×</span><span class="gorunmez">{{ p.kod }} satırını kaldır</span>
+      </label>
+    </div>
+    {% empty %}
+    <p class="not">Ürün ağacı boş. Aşağıdan parça ekleyin.</p>
+    {% endfor %}
+  </div>
+
+  <div class="m-kart">
+    <div class="alan">
+      <label for="m-yeni-parca">Parça ekle</label>
+      <input type="text" id="m-yeni-parca" name="yeni_parca" value="{{ yeni_satir.yeni_parca.value|default_if_none:'' }}" list="parca-listesi" class="girdi" placeholder="Parça adı veya kodu" autocomplete="off">
+      {% for e in yeni_satir.yeni_parca.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+    <div class="m-satir">
+      <input type="number" name="yeni_adet" min="1" inputmode="numeric" value="{{ yeni_satir.yeni_adet.value|default_if_none:'' }}" class="girdi" placeholder="Adet / ürün" aria-label="Eklenecek parçanın adedi">
+      <button type="submit" name="islem" value="ekle" class="btn btn--ikincil m-btn-orta">Ekle</button>
+    </div>
+    {% for e in yeni_satir.yeni_adet.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+  <datalist id="parca-listesi">
+    {% for p in parcalar %}<option value="{{ p.kod }}">{{ p.ad }}</option>{% endfor %}
+  </datalist>
+
+  <p class="yardim">× ile işaretlenen satırlar ve değiştirilen adetler “Kaydet” ile uygulanır.</p>
+  <button type="submit" name="islem" value="kaydet" class="btn m-btn-buyuk">Kaydet</button>
+  {% if urun %}<a href="{% url 'takip:m_uretim' %}?urun={{ urun.pk }}" class="btn btn--ikincil m-btn-buyuk">Bu üründen üret</a>{% endif %}
+</form>
+{% endblock %}

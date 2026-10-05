@@ -1,0 +1,25 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Satış geçmişi{% endblock %}
+{% block sayfa_basligi %}Satış{% endblock %}
+{% block icerik %}
+{% include 'takip/mobil/_satis_sekmeler.html' %}
+<form method="get" class="m-satir" role="search">
+  <input type="search" name="q" value="{{ q }}" class="girdi" placeholder="Müşteri veya seri no ara…" aria-label="Satışlarda ara" enterkeyhint="search">
+  <button type="submit" class="btn btn--ikincil m-btn-orta">Ara</button>
+</form>
+<div class="m-kart-liste">
+  {% for s in gecmis %}
+  <div class="m-oge m-oge--dikey">
+    <span class="m-oge-ust">
+      <span class="kalin">{{ s.musteri.ad }}</span>
+      <span class="yardim">{{ s.satis.tarih|date:"d.m.Y" }}</span>
+    </span>
+    <span>{{ s.urun.ad }} · {{ s.seri_nolar|length }} adet</span>
+    <span class="seri-listesi">{% for seri in s.seri_nolar %}<a href="{% url 'takip:m_iz' %}?sekme=seri&amp;seri={{ seri|urlencode }}" class="seri-cip seri-cip--mavi">{{ seri }}</a>{% endfor %}</span>
+  </div>
+  {% empty %}
+  <p class="not">{% if q %}“{{ q }}” için satış bulunamadı.{% else %}Henüz satış yok.{% endif %}</p>
+  {% endfor %}
+</div>
+<p class="yardim">Seri numarasına dokununca ürünün içindeki parçalar ve lotları açılır.</p>
+{% endblock %}

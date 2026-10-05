@@ -1,0 +1,19 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}Yeni parça{% endblock %}
+{% block geri %}<a class="m-geri" href="{% url 'takip:m_parcalar' %}">‹ Parçalar</a>{% endblock %}
+{% block sayfa_basligi %}Yeni parça{% endblock %}
+{% block icerik %}
+<form method="post" class="m-form" novalidate>
+  {% csrf_token %}
+  {% for e in form.non_field_errors %}<div class="mesaj mesaj--error">{{ e }}</div>{% endfor %}
+  {% for alan in form %}
+  <div class="alan">
+    <label for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+    {{ alan }}
+    {% for e in alan.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+  </div>
+  {% endfor %}
+  <p class="not">Lot numarası burada girilmez; parça her geldiğinde Stok → Mal girişi ile yeni lot olarak eklenir.</p>
+  <button type="submit" class="btn m-btn-buyuk">Parçayı kaydet</button>
+</form>
+{% endblock %}

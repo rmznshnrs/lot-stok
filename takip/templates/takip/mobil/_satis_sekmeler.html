@@ -1,0 +1,4 @@
+<nav class="sekmeler m-sekmeler" aria-label="Satış">
+  <a href="{% url 'takip:m_satis' %}" class="sekme{% if alt_sekme == 'yeni' %} sekme--aktif{% endif %}"{% if alt_sekme == 'yeni' %} aria-current="page"{% endif %}>Yeni satış</a>
+  <a href="{% url 'takip:m_satis_gecmis' %}" class="sekme{% if alt_sekme == 'gecmis' %} sekme--aktif{% endif %}"{% if alt_sekme == 'gecmis' %} aria-current="page"{% endif %}>Satış geçmişi</a>
+</nav>

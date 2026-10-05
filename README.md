@@ -61,17 +61,20 @@ Bir sorun çıktığında **İzlenebilirlik** ekranından lot veya seri no ile g
 
 ## Mobil uygulama (PWA)
 
-Depoda ve sevkiyatta telefondan kullanmak için **/m/** adresinde üç ekranlı bir mobil
-uygulama vardır. Alt sekme menüsüyle ekranlar arasında geçilir:
+Masaüstündeki tüm işlevler telefonda **/m/** adresinde, tek elle kullanılabilecek
+şekilde vardır. Listeler kart biçimindedir, düğmeler büyüktür ve hiçbir ekran yana
+kaymaz. Alt menüde 5 sekme bulunur:
 
-| Ekran | Ne yapılır |
+| Sekme | Ne yapılır |
 |---|---|
-| **Sorgula** | Etiketteki barkod / karekod kamerayla okutulur ya da numara elle yazılır. Lot için kullanıldığı ürünler ve müşteriler özeti, seri no için içindeki parçalar ve lotlar gösterilir. |
-| **Mal girişi** | Parça kodu veya adı yazılır, lot numarası kamerayla okutulabilir (**Tara**). |
-| **Satış** | Müşteri seçilir, seri numaraları art arda okutularak listeye eklenir. Geri çağrılan lot içeren ürün listede uyarıyla gösterilir ve telefon titrer. |
+| **Ana Sayfa** | Etiket kamerayla okutulur veya numara yazılır; lot, seri no ya da parça kodu olduğu kendiliğinden anlaşılır. 3 hızlı işlem ve son hareketler de buradadır. |
+| **Stok** | Parça kartları (kullanılabilir adet, sıradaki lot, minimum uyarısı). Parçaya dokununca lotları, lota dokununca izi açılır. **Mal girişi** sekmesinde lot numarası kamerayla okutulabilir. |
+| **Üretim** | Ürün seçilir, adet büyük −/+ ile ayarlanır. Parça kontrolünde hangi lottan kaç adet düşüleceği ve eksikler görünür; stok yetmezse kaydet düğmesi pasiftir. Kayıttan sonra verilen seri numaraları gösterilir. |
+| **Satış** | Müşteri seçilir, seri numaraları art arda okutulur. Geri çağrılan lot içeren ürün uyarıyla gösterilir ve telefon titrer. **Satış geçmişi** sekmesinde arama yapılabilir. |
+| **Daha fazla** | **İzlenebilirlik** (lot → ürün → müşteri, seri no → parçalar, lotu geri çağırma), **Ürünler** (ürün ağacını görüntüleme ve düzenleme), **Parçalar** (tanımlama ve liste). |
 
-Uygulama telefonda **ana ekrana eklenebilir**; uygulama gibi tam ekran açılır.
-Veriler her zaman sunucudan güncel gelir. İnternet yoksa "Bağlantı yok" sayfası
+Uygulama telefonda **ana ekrana eklenebilir** ve uygulama gibi tam ekran açılır.
+Veriler her zaman sunucudan güncel gelir; internet yoksa "Bağlantı yok" sayfası
 gösterilir.
 
 Kamera güvenlik nedeniyle yalnızca **HTTPS** bağlantıda açılır. Kamera açılmazsa

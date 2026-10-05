@@ -1,0 +1,136 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}{% if sekme == 'seri' %}{{ seri_no|default:'Seri no' }}{% else %}{{ lot_no|default:'Lot' }}{% endif %} – İzlenebilirlik{% endblock %}
+{% block geri %}<a class="m-geri" href="{% url 'takip:m_daha' %}">‹ Daha fazla</a>{% endblock %}
+{% block sayfa_basligi %}İzlenebilirlik{% endblock %}
+{% block icerik %}
+<nav class="sekmeler m-sekmeler" aria-label="İzleme yönü">
+  <a href="{{ lot_sekme_url }}" class="sekme{% if sekme == 'lot' %} sekme--aktif{% endif %}"{% if sekme == 'lot' %} aria-current="page"{% endif %}>Lot → Müşteri</a>
+  <a href="{{ seri_sekme_url }}" class="sekme{% if sekme == 'seri' %} sekme--aktif{% endif %}"{% if sekme == 'seri' %} aria-current="page"{% endif %}>Seri no → Parçalar</a>
+</nav>
+
+<form method="get" id="m-iz-arama" role="search">
+  <input type="hidden" name="sekme" value="{{ sekme }}">
+  <div class="m-satir">
+    {% if sekme == 'lot' %}
+    <input type="search" id="m-iz-q" name="lot" value="{{ lot_no }}" class="girdi girdi--mono" placeholder="Lot no" aria-label="Lot no" autocomplete="off" autocapitalize="characters" enterkeyhint="search">
+    {% else %}
+    <input type="search" id="m-iz-q" name="seri" value="{{ seri_no }}" class="girdi girdi--mono" placeholder="Seri no" aria-label="Seri no" autocomplete="off" autocapitalize="characters" enterkeyhint="search">
+    {% endif %}
+    <button type="button" class="btn btn--ikincil m-btn-tara" data-tara-hedef="m-iz-q" data-tara-gonder data-tara-baslik="{% if sekme == 'lot' %}Lot numarasını{% else %}Seri numarasını{% endif %} okutun" hidden>Tara</button>
+    <button type="submit" class="btn m-btn-orta">Göster</button>
+  </div>
+</form>
+
+{% if sekme == 'lot' %}
+  {% if not lot_no %}
+  <p class="not">Lot numarasını okutun veya yazın: lottaki parçanın hangi ürünlerde kullanıldığı ve kime satıldığı gösterilir.</p>
+  {% elif not iz %}
+  <div class="mesaj mesaj--warning"><span class="mono">{{ lot_no }}</span> lot numarası bulunamadı.</div>
+  {% else %}
+  {% with lot=iz.lot %}
+  <section class="m-kart{% if lot.geri_cagrildi %} m-kart--geri{% endif %}">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ lot.lot_no }}</span>
+      {% if lot.geri_cagrildi %}<span class="rozet rozet--uyari">Geri çağrıldı</span>{% else %}<span class="rozet rozet--mavi">Lot</span>{% endif %}
+    </div>
+    <div class="m-kart-baslik">{{ lot.parca.ad }} <span class="mono yardim">{{ lot.parca.kod }}</span></div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Tedarikçi</span><span>{{ lot.tedarikci.ad }}</span></div>
+      <div class="bilgi"><span>Sipariş tarihi</span><span>{{ lot.siparis_tarihi|date:"d.m.Y" }}</span></div>
+      <div class="bilgi"><span>Stokta kalan</span><span>{{ lot.kalan_adet }} / {{ lot.giris_adet }}</span></div>
+      <div class="bilgi"><span>Giriş</span><span>{{ lot.giris_zamani|date:"d.m.Y H:i" }}</span></div>
+    </div>
+    <div class="m-ozet">
+      <span><strong>{{ iz.uretimler|length }}</strong> üründe kullanıldı</span>
+      <span{% if iz.musteriler %} class="uyari-metin"{% endif %}><strong>{{ iz.musteriler|length }}</strong> müşteriye ulaştı</span>
+      <span><strong>{{ iz.stoktaki_uretimler|length }}</strong> ürün depoda</span>
+    </div>
+  </section>
+
+  {% if iz.musteriler %}
+  <section class="m-bolum">
+    <h2 class="m-bolum-baslik">Etkilenen müşteriler</h2>
+    <div class="m-kart-liste">
+      {% for m in iz.musteriler %}
+      <div class="m-oge m-oge--dikey">
+        <span class="kalin">{{ m.ad }}</span>
+        <span class="seri-listesi">{% for s in m.satislar %}<a href="?sekme=seri&amp;seri={{ s.seri_no|urlencode }}" class="seri-cip seri-cip--mavi">{{ s.seri_no }} · {{ s.tarih|date:"d.m.Y" }}</a>{% endfor %}</span>
+        {% if m.iletisim %}<span class="yardim">{{ m.iletisim }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="m-bolum">
+    <h2 class="m-bolum-baslik">Kullanıldığı ürünler</h2>
+    <div class="m-kart-liste">
+      {% for u in iz.uretimler %}
+      <a href="?sekme=seri&amp;seri={{ u.seri_no|urlencode }}" class="m-oge">
+        <span class="baslik-grup"><span class="mono kalin">{{ u.seri_no }}</span><span class="yardim">{{ u.urun_ad }} · {{ u.adet }} adet kullanıldı</span></span>
+        {% if u.satis %}<span class="rozet rozet--uyari">Satıldı</span>{% else %}<span class="rozet rozet--basari">Depoda</span>{% endif %}
+        <span class="m-ok" aria-hidden="true">›</span>
+      </a>
+      {% empty %}
+      <p class="not">Bu lot henüz hiçbir üretimde kullanılmadı.</p>
+      {% endfor %}
+    </div>
+    {% if lot.geri_cagrildi and iz.stoktaki_uretimler %}
+    <div class="uyari-kutu">Depodaki {% for u in iz.stoktaki_uretimler %}<span class="mono">{{ u.seri_no }}</span>{% if not forloop.last %}, {% endif %}{% endfor %} sevkiyattan önce ayrılmalı.</div>
+    {% endif %}
+  </section>
+
+  <form method="post" action="{% url 'takip:lot_geri_cagir' %}" class="m-geri-cagir">
+    {% csrf_token %}
+    <input type="hidden" name="lot_no" value="{{ lot.lot_no }}">
+    <input type="hidden" name="sonraki" value="{{ request.get_full_path }}">
+    {% if lot.geri_cagrildi %}
+    <input type="hidden" name="islem" value="kaldir">
+    <button type="submit" class="btn btn--ikincil m-btn-buyuk" data-onay="{{ lot.lot_no }} için geri çağırma kaldırılsın mı? Lot yeniden üretimde kullanılabilir olacak.">Geri çağırmayı kaldır</button>
+    {% else %}
+    <button type="submit" class="btn btn--geri m-btn-buyuk" data-onay="{{ lot.lot_no }} geri çağrılsın mı? Lot üretimde kullanılmayacak; {{ iz.uretimler|length }} ürün ve {{ iz.musteriler|length }} müşteri etkileniyor.">Bu lotu geri çağır</button>
+    {% endif %}
+  </form>
+  {% endwith %}
+  {% endif %}
+
+{% else %}
+  {% if not seri_no %}
+  <p class="not">Seri numarasını okutun veya yazın: ürünün içindeki parçalar, lotları ve adetleri gösterilir.</p>
+  {% elif not iz %}
+  <div class="mesaj mesaj--warning"><span class="mono">{{ seri_no }}</span> seri numarası bulunamadı.</div>
+  {% else %}
+  <section class="m-kart{% if iz.geri_cagrilan_lotlar %} m-kart--geri{% endif %}">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ iz.uretim.seri_no }}</span>
+      {% if iz.satis %}<span class="rozet rozet--uyari">Satıldı</span>{% else %}<span class="rozet rozet--basari">Depoda</span>{% endif %}
+    </div>
+    <div class="m-kart-baslik">{{ iz.urun.ad }}</div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Üretim</span><span>{{ iz.uretim.tarih|date:"d.m.Y H:i" }}</span></div>
+      <div class="bilgi"><span>Satış</span>{% if iz.satis %}<span>{{ iz.musteri.ad }} · {{ iz.satis.tarih|date:"d.m.Y" }}</span>{% else %}<span class="soluk">Henüz satılmadı</span>{% endif %}</div>
+    </div>
+    {% if iz.musteri.iletisim %}<div class="bilgi"><span>Müşteri iletişim</span><span>{{ iz.musteri.iletisim }}</span></div>{% endif %}
+    {% if iz.geri_cagrilan_lotlar %}<div class="uyari-kutu">Bu üründe geri çağrılan {{ iz.geri_cagrilan_lotlar|length }} lot var.</div>{% endif %}
+  </section>
+
+  <section class="m-bolum">
+    <h2 class="m-bolum-baslik">İçindeki parçalar ve lotları</h2>
+    <div class="m-kart-liste">
+      {% for p in iz.parcalar %}
+      <a href="?lot={{ p.lot.lot_no|urlencode }}" class="m-oge{% if p.geri_cagrildi %} m-oge--uyari{% endif %}">
+        <span class="baslik-grup">
+          <span class="kalin">{{ p.parca.ad }}</span>
+          <span class="mono yardim{% if p.geri_cagrildi %} uyari-metin{% endif %}">{{ p.lot.lot_no }}{% if p.geri_cagrildi %} · geri çağrıldı{% endif %}</span>
+          <span class="yardim">{{ p.tedarikci.ad }} · sipariş {{ p.siparis_tarihi|date:"d.m.Y" }}</span>
+        </span>
+        <span class="m-sag-sayi"><span class="kalin">{{ p.adet }}</span><span class="yardim">adet</span></span>
+        <span class="m-ok" aria-hidden="true">›</span>
+      </a>
+      {% endfor %}
+    </div>
+    <p class="yardim">Lota dokununca o lotun kullanıldığı diğer ürünler ve müşteriler açılır.</p>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}

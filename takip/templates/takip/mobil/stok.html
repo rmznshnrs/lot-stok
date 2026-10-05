@@ -1,0 +1,73 @@
+{% extends 'takip/mobil/base.html' %}
+{% block baslik %}{% if secili %}{{ secili.parca.kod }}{% else %}Stok{% endif %}{% endblock %}
+{% block geri %}{% if secili %}<a class="m-geri" href="{% url 'takip:m_stok' %}">‹ Stok</a>{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block sayfa_basligi %}{% if secili %}{{ secili.parca.ad }}{% else %}Stok{% endif %}{% endblock %}
+{% block icerik %}
+{% include 'takip/mobil/_stok_sekmeler.html' %}
+
+{% if secili %}
+  {% with p=secili.parca %}
+  <section class="m-kart">
+    <div class="m-kart-ust">
+      <span class="mono m-numara">{{ p.kod }}</span>
+      {% if p.min_altinda %}<span class="rozet rozet--uyari">Min altında</span>{% endif %}
+    </div>
+    <div class="m-bilgi-izgara">
+      <div class="bilgi"><span>Kullanılabilir</span><span class="m-buyuk-sayi{% if p.min_altinda %} uyari-metin{% endif %}">{{ p.kullanilabilir_stok }}</span></div>
+      <div class="bilgi"><span>Toplam</span><span class="m-buyuk-sayi">{{ p.toplam_stok }}</span></div>
+      <div class="bilgi"><span>Minimum</span><span>{{ p.min_stok }} {{ p.birim }}</span></div>
+      <div class="bilgi"><span>Lot sayısı</span><span>{{ p.lot_sayisi }}</span></div>
+    </div>
+    <a href="{% url 'takip:m_giris' %}?parca={{ p.kod|urlencode }}" class="btn m-btn-buyuk">+ Bu parçadan mal girişi</a>
+  </section>
+
+  <section class="m-bolum">
+    <div class="bas-satir">
+      <h2 class="m-bolum-baslik">Lotlar (önce kullanılacak üstte)</h2>
+      {% if bitenler %}<a href="?parca={{ p.kod|urlencode }}" class="m-kucuk-baglanti">Bitenleri gizle</a>{% else %}<a href="?parca={{ p.kod|urlencode }}&amp;bitenler=1" class="m-kucuk-baglanti">Bitenleri göster</a>{% endif %}
+    </div>
+    <div class="m-kart-liste">
+      {% for lot in secili.lotlar %}
+      <a href="{% url 'takip:m_iz' %}?lot={{ lot.lot_no|urlencode }}" class="m-oge{% if lot.geri_cagrildi %} m-oge--uyari{% endif %}">
+        <span class="baslik-grup">
+          <span class="mono kalin">{{ lot.lot_no }}{% if lot.sirada %} <span class="lot-etiket">· sıradaki</span>{% endif %}{% if lot.geri_cagrildi %} <span class="lot-etiket lot-etiket--uyari">· geri çağrıldı</span>{% endif %}{% if not lot.kalan_adet %} <span class="lot-etiket lot-etiket--soluk">· bitti</span>{% endif %}</span>
+          <span class="yardim">{{ lot.tedarikci.ad }} · sipariş {{ lot.siparis_tarihi|date:"d.m.Y" }}</span>
+        </span>
+        <span class="m-sag-sayi"><span class="kalin">{{ lot.kalan_adet }}</span><span class="yardim">/ {{ lot.giris_adet }}</span></span>
+        <span class="m-ok" aria-hidden="true">›</span>
+      </a>
+      {% empty %}
+      <p class="not">Stokta lot yok.</p>
+      {% endfor %}
+    </div>
+  </section>
+  {% endwith %}
+
+{% else %}
+  <form method="get" class="m-satir" role="search">
+    <input type="search" name="q" value="{{ q }}" class="girdi" placeholder="Parça veya lot ara…" aria-label="Stokta ara" enterkeyhint="search">
+    <button type="submit" class="btn btn--ikincil m-btn-orta">Ara</button>
+  </form>
+  <div class="m-kart-liste">
+    {% for g in gruplar %}
+    {% with p=g.parca %}
+    <a href="?parca={{ p.kod|urlencode }}" class="m-oge{% if p.min_altinda %} m-oge--uyari{% endif %}">
+      <span class="baslik-grup">
+        <span class="kalin">{{ p.ad }}</span>
+        <span class="mono yardim">{{ p.kod }}</span>
+        <span class="yardim">{% if g.siradaki %}Sıradaki: <span class="mono">{{ g.siradaki.lot_no }}</span>{% else %}Kullanılabilir lot yok{% endif %}{% if p.toplam_stok != p.kullanilabilir_stok %} · toplam {{ p.toplam_stok }}{% endif %}</span>
+      </span>
+      <span class="m-sag-sayi">
+        <span class="m-buyuk-sayi{% if p.min_altinda %} uyari-metin{% endif %}">{{ p.kullanilabilir_stok }}</span>
+        <span class="yardim{% if p.min_altinda %} uyari-metin{% endif %}">{% if p.min_altinda %}min altında{% else %}{{ p.birim }}{% endif %}</span>
+      </span>
+      <span class="m-ok" aria-hidden="true">›</span>
+    </a>
+    {% endwith %}
+    {% empty %}
+    <p class="not">{% if q %}“{{ q }}” için sonuç yok.{% else %}Henüz parça yok.{% endif %}</p>
+    {% endfor %}
+  </div>
+  <p class="yardim">Sayı, geri çağrılanlar hariç kullanılabilir adettir. Parçaya dokununca lotları açılır.</p>
+{% endif %}
+{% endblock %}
