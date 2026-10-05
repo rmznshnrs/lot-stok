@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Ana Sayfa – Yeni taslak</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;background:#F6F5F1;color:#1C1F24}
+a{color:#1F4E8C}a:hover{color:#163A69}
+</style>
+</helmet>
+<div style="width: 1280px; height: 820px; display: flex; flex-direction: column; background: #F6F5F1; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #1C1F24">
+<header style="height: 64px; flex-shrink: 0; background: #FFFFFF; border-bottom: 1px solid #E2DFD7; display: flex; align-items: center; gap: 28px; padding: 0 32px">
+<div style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500; letter-spacing: 0.06em">LOT TAKİP</div>
+<nav style="display: flex; gap: 4px">
+<a href="V2Home.dc.html" style="padding: 8px 12px; border-radius: 6px; background: #EEF3FA; color: #163A69; text-decoration: none; font-size: 14px; font-weight: 600">Ana Sayfa</a>
+<a href="V2Trace.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">İzlenebilirlik</a>
+<a href="V2Production.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">Üretim</a>
+<a href="V2Stock.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">Stok</a>
+<a href="V2Sales.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">Satış</a>
+<a href="V2Products.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">Ürünler</a>
+<a href="V2Parts.dc.html" style="padding: 8px 12px; border-radius: 6px; color: #3D434C; text-decoration: none; font-size: 14px">Parçalar</a>
+</nav>
+</header>
+<main style="flex-grow: 1; padding: 40px 64px; display: flex; flex-direction: column; gap: 32px; box-sizing: border-box">
+<section style="display: flex; flex-direction: column; gap: 12px">
+<h1 style="margin: 0; font-size: 28px; font-weight: 600">Bir lot veya seri numarasının izini sür</h1>
+<div style="display: flex; gap: 12px">
+<input aria-label="Lot, seri no veya parça kodu" placeholder="Lot no, seri no veya parça kodu yazın — örn. L-2409-117 veya SN-IP-0231" style="flex-grow: 1; height: 56px; border: 2px solid #1F4E8C; border-radius: 12px; padding: 0 20px; font-family: 'IBM Plex Mono', monospace; font-size: 16px; background: #FFFFFF; box-sizing: border-box">
+<a href="V2Trace.dc.html" style="height: 56px; padding: 0 32px; border-radius: 12px; background: #1F4E8C; color: #FFFFFF; text-decoration: none; font-size: 16px; font-weight: 600; display: flex; align-items: center">İzini sür</a>
+</div>
+<div style="font-size: 13px; color: #5B616B">Sistem numaranın lot mu seri no mu olduğunu kendisi anlar ve ilgili zinciri gösterir.</div>
+</section>
+<section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px">
+<a href="V2Stock.dc.html" style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: #1C1F24">
+<div style="width: 40px; height: 40px; border-radius: 10px; background: #EEF3FA; color: #1F4E8C; font-family: 'IBM Plex Mono', monospace; font-weight: 600; display: flex; align-items: center; justify-content: center">1</div>
+<div style="font-size: 18px; font-weight: 600">Mal girişi yap</div>
+<div style="font-size: 14px; color: #5B616B; line-height: 1.5">Gelen parçayı lot numarası, tedarikçi ve tarihiyle stoğa ekle</div>
+</a>
+<a href="V2Production.dc.html" style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: #1C1F24">
+<div style="width: 40px; height: 40px; border-radius: 10px; background: #EEF3FA; color: #1F4E8C; font-family: 'IBM Plex Mono', monospace; font-weight: 600; display: flex; align-items: center; justify-content: center">2</div>
+<div style="font-size: 18px; font-weight: 600">Ürün üret</div>
+<div style="font-size: 14px; color: #5B616B; line-height: 1.5">Ürün seç, adet gir; parçalar ilk gelen lottan düşülür, seri no verilir</div>
+</a>
+<a href="V2Sales.dc.html" style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: #1C1F24">
+<div style="width: 40px; height: 40px; border-radius: 10px; background: #EEF3FA; color: #1F4E8C; font-family: 'IBM Plex Mono', monospace; font-weight: 600; display: flex; align-items: center; justify-content: center">3</div>
+<div style="font-size: 18px; font-weight: 600">Satış kaydet</div>
+<div style="font-size: 14px; color: #5B616B; line-height: 1.5">Satılan seri numaralarını müşteriye ve tarihe bağla</div>
+</a>
+</section>
+<section style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 20px 24px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1">
+<h2 style="margin: 0 0 8px; font-size: 16px; font-weight: 600">Son hareketler</h2>
+<div style="display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #EFEDE7; font-size: 14px">
+<span style="width: 90px; color: #5B616B">24.09.2026</span>
+<span style="width: 70px; padding: 3px 0; border-radius: 99px; background: #E3ECF7; color: #163A69; font-size: 12px; font-weight: 500; text-align: center">Giriş</span>
+<span style="flex-grow: 1">1N4001 Diyot · [adet] adet · [Tedarikçi]</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">L-2409-117</span>
+</div>
+<div style="display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #EFEDE7; font-size: 14px">
+<span style="width: 90px; color: #5B616B">23.09.2026</span>
+<span style="width: 70px; padding: 3px 0; border-radius: 99px; background: #E6EFE4; color: #2D5A27; font-size: 12px; font-weight: 500; text-align: center">Üretim</span>
+<span style="flex-grow: 1">İndikatör Paneli · [adet] adet</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">SN-IP-0231</span>
+</div>
+<div style="flex-grow: 1; padding: 0 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="height: 220px; border-radius: 16px; background: #1C1F24; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px">
+<div style="width: 180px; height: 110px; border: 2px dashed #9AA3AE; border-radius: 10px"></div>
+<div style="font-size: 14px; color: #E8E6E1">Barkodu / etiketi kameraya tutun</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="m" style="font-size: 13px; color: #5B616B">veya elle girin</label>
+<div style="display: flex; gap: 8px">
+<input id="m" placeholder="L-2409-117" style="flex-grow: 1; height: 48px; border: 1px solid #C9C6BD; border-radius: 10px; padding: 0 12px; font-family: 'IBM Plex Mono', monospace; font-size: 15px; background: #FFFFFF">
+<button style="height: 48px; padding: 0 18px; border-radius: 10px; border: none; background: #1F4E8C; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 500">Sorgula</button>
+</div>
+</div>
+<div style="background: #FFFFFF; border: 1px solid #E2DFD7; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 500">L-2409-117</span>
+<span style="padding: 3px 10px; border-radius: 99px; background: #FDEBD9; color: #8A3B00; font-size: 12px; font-weight: 500">Geri çağırma</span>
+</div>
+<div style="font-size: 15px; font-weight: 600">1N4001 Diyot</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; font-size: 13px">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Tedarikçi</span><span>[Tedarikçi]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Kalan stok</span><span>[adet]</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Kullanıldığı ürün</span><span>[x] seri no</span></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="color: #5B616B">Satılan müşteri</span><span>[y] müşteri</span></div>
+</div>
+<a href="#" style="height: 44px; border-radius: 10px; border: 1px solid #C9C6BD; display: flex; align-items: center; justify-content: center; text-decoration: none; color: #1C1F24; font-size: 14px; font-weight: 500">Detaylı izi gör</a>
+</div>
+</div><div style="display: flex; align-items: center; gap: 16px; padding: 10px 0; font-size: 14px">
+<span style="width: 90px; color: #5B616B">22.09.2026</span>
+<span style="width: 70px; padding: 3px 0; border-radius: 99px; background: #FDEBD9; color: #8A3B00; font-size: 12px; font-weight: 500; text-align: center">Satış</span>
+<span style="flex-grow: 1">İndikatör Paneli · [Müşteri A]</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px">SN-IP-0228</span>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":820}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

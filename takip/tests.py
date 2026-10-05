@@ -4,6 +4,7 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.test import TestCase
+from django.urls import reverse, reverse_lazy
 
 from . import services
 from .models import (
@@ -272,3 +273,155 @@ class OrnekVeriTest(TestCase):
         self.assertEqual(SatisKalemi.objects.count(), 3)
         call_command('ornek_veri', '--sifirla', stdout=StringIO())
         self.assertEqual(Uretim.objects.count(), 9)
+
+
+class ParcaStoklariTest(TemelVeri):
+    def test_toplam_kullanilabilir_lot_sayisi_ve_min(self):
+        self.diyot.min_stok = 20
+        self.diyot.save()
+        Parca.objects.create(kod='YENI', ad='Yeni parça')
+        p = {x.kod: x for x in services.parca_stoklari()}
+        self.assertEqual(p['DIY'].toplam_stok, 63)        # 10 + 3 + 50 (geri çağrılan)
+        self.assertEqual(p['DIY'].kullanilabilir_stok, 13)
+        self.assertEqual(p['DIY'].lot_sayisi, 3)
+        self.assertTrue(p['DIY'].min_altinda)
+        self.assertFalse(p['LED'].min_altinda)
+        self.assertEqual((p['YENI'].toplam_stok, p['YENI'].lot_sayisi), (0, 0))
+
+    def test_bitmis_lot_sayilmaz(self):
+        services.uretim_yap(self.urun, 3)  # L-D-ESKI biter
+        self.assertEqual(services.parca_stoklari().get(kod='DIY').lot_sayisi, 2)
+
+
+class MenuTest(TestCase):
+    def test_tum_menu_sayfalari_acilir(self):
+        for ad in ('ana_sayfa', 'izlenebilirlik', 'uretim', 'stok', 'satis', 'parcalar'):
+            with self.subTest(ad=ad):
+                yanit = self.client.get(reverse(f'takip:{ad}'))
+                self.assertEqual(yanit.status_code, 200)
+                self.assertContains(yanit, 'class="aktif"')
+                self.assertContains(yanit, 'takip/style.css')
+
+
+class ParcalarEkraniTest(TemelVeri):
+    url = reverse_lazy('takip:parcalar')
+
+    def test_liste_gercek_degerleri_gosterir(self):
+        self.diyot.min_stok = 20
+        self.diyot.save()
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'DIY')
+        self.assertContains(yanit, 'İndikatör Paneli')
+        self.assertContains(yanit, '>13</a> · min altında')
+        self.assertContains(yanit, 'uyari-satir')
+        self.assertNotContains(yanit, '[')  # yer tutucu kalmamalı
+
+    def test_kullanilmayan_parca(self):
+        Parca.objects.create(kod='BOSTA', ad='Boşta')
+        self.assertContains(self.client.get(self.url), 'Henüz hiçbir ürün ağacında yok')
+
+    def test_arama(self):
+        yanit = self.client.get(self.url, {'q': 'diyot'})
+        self.assertEqual([p.kod for p in yanit.context['parcalar']], ['DIY'])
+
+    def test_parca_kaydet(self):
+        yanit = self.client.post(self.url, {'kod': ' STM32F103 ', 'ad': 'Mikrodenetleyici',
+                                            'birim': 'adet', 'min_stok': 5})
+        parca = Parca.objects.get(kod='STM32F103')
+        self.assertRedirects(yanit, f'{self.url}?yeni={parca.pk}')
+        self.assertContains(self.client.get(yanit.url), 'rozet--mavi')
+
+    def test_ayni_kod_tekrar_kaydedilemez(self):
+        yanit = self.client.post(self.url, {'kod': 'diy', 'ad': 'X', 'birim': 'adet',
+                                            'min_stok': 0})
+        self.assertEqual(yanit.status_code, 200)
+        self.assertContains(yanit, 'Bu kodla bir parça zaten var.')
+        self.assertEqual(Parca.objects.filter(kod__iexact='diy').count(), 1)
+
+
+class UrunlerEkraniTest(TemelVeri):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('takip:urun', args=[self.urun.pk])
+
+    def post_verisi(self, **ek):
+        satirlar = list(self.urun.agac.order_by('parca__kod'))
+        veri = {
+            'ad': self.urun.ad, 'kod': self.urun.kod, 'seri_oneki': self.urun.seri_oneki,
+            'agac-TOTAL_FORMS': len(satirlar), 'agac-INITIAL_FORMS': len(satirlar),
+            'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+            'yeni_parca': '', 'yeni_adet': '',
+        }
+        for i, s in enumerate(satirlar):
+            veri.update({f'agac-{i}-id': s.pk, f'agac-{i}-parca': s.parca_id,
+                         f'agac-{i}-adet': s.adet, f'agac-{i}-urun': self.urun.pk})
+        veri.update(ek)
+        return veri
+
+    def agac(self):
+        return dict(self.urun.agac.values_list('parca__kod', 'adet'))
+
+    def test_liste_ilk_urune_yonlendirir(self):
+        self.assertRedirects(self.client.get(reverse('takip:urunler')), self.url)
+
+    def test_urun_ve_agac_gosterilir(self):
+        yanit = self.client.get(self.url)
+        self.assertContains(yanit, 'liste-oge--secili')
+        self.assertContains(yanit, 'value="SN-IP-"')
+        self.assertContains(yanit, 'Diyot')
+        self.assertContains(yanit, '<option value="LED">')
+        self.assertNotContains(yanit, '[')
+
+    def test_adet_degistir(self):
+        # Sıra: DIY (0), LED (1)
+        yanit = self.client.post(self.url, self.post_verisi(**{'agac-1-adet': 6}))
+        self.assertRedirects(yanit, self.url)
+        self.assertEqual(self.agac(), {'DIY': 1, 'LED': 6})
+
+    def test_satir_kaldir(self):
+        self.client.post(self.url, self.post_verisi(**{'agac-0-DELETE': 'on'}))
+        self.assertEqual(self.agac(), {'LED': 4})
+
+    def test_parca_ekle(self):
+        Parca.objects.create(kod='PCB', ad='Kart')
+        yanit = self.client.post(self.url, self.post_verisi(
+            yeni_parca='pcb', yeni_adet=1, islem='ekle'))
+        self.assertRedirects(yanit, self.url)
+        self.assertEqual(self.agac(), {'DIY': 1, 'LED': 4, 'PCB': 1})
+
+    def test_agacta_olan_parca_tekrar_eklenemez(self):
+        yanit = self.client.post(self.url, self.post_verisi(yeni_parca='LED', yeni_adet=2))
+        self.assertContains(yanit, 'zaten ağaçta')
+        self.assertEqual(self.agac(), {'DIY': 1, 'LED': 4})
+
+    def test_kaldirilan_parca_ayni_kayitta_yeniden_eklenebilir(self):
+        self.client.post(self.url, self.post_verisi(
+            **{'agac-1-DELETE': 'on', 'yeni_parca': 'LED', 'yeni_adet': 2}))
+        self.assertEqual(self.agac(), {'DIY': 1, 'LED': 2})
+
+    def test_hatali_girislerde_hicbir_sey_kaydedilmez(self):
+        for ek in ({'agac-1-adet': 0}, {'yeni_parca': 'YOK', 'yeni_adet': 1},
+                   {'yeni_parca': 'LED'}, {'ad': ''}):
+            with self.subTest(ek=ek):
+                veri = self.post_verisi(**{'agac-0-DELETE': 'on', **ek})
+                self.assertEqual(self.client.post(self.url, veri).status_code, 200)
+                self.assertEqual(self.agac(), {'DIY': 1, 'LED': 4})
+
+    def test_yeni_urun(self):
+        url = reverse('takip:urun_yeni')
+        self.assertEqual(self.client.get(url).status_code, 200)
+        yanit = self.client.post(url, {
+            'ad': 'Röle Kartı', 'kod': 'RK', 'seri_oneki': 'SN-RK-',
+            'agac-TOTAL_FORMS': 0, 'agac-INITIAL_FORMS': 0,
+            'agac-MIN_NUM_FORMS': 0, 'agac-MAX_NUM_FORMS': 1000,
+            'yeni_parca': 'DIY', 'yeni_adet': 2,
+        })
+        urun = Urun.objects.get(kod='RK')
+        self.assertRedirects(yanit, reverse('takip:urun', args=[urun.pk]))
+        self.assertEqual(list(urun.agac.values_list('parca__kod', 'adet')), [('DIY', 2)])
+
+    def test_uretim_varsa_seri_oneki_degismez(self):
+        services.uretim_yap(self.urun, 1)
+        self.client.post(self.url, self.post_verisi(seri_oneki='YENI-', ad='Panel v2'))
+        self.urun.refresh_from_db()
+        self.assertEqual((self.urun.ad, self.urun.seri_oneki), ('Panel v2', 'SN-IP-'))

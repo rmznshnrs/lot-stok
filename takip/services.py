@@ -6,10 +6,11 @@ import re
 from dataclasses import dataclass, field
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import BooleanField, Count, ExpressionWrapper, F, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
-from .models import Satis, SatisKalemi, StokLotu, Uretim, UretimTuketim
+from .models import Parca, Satis, SatisKalemi, StokLotu, Uretim, UretimTuketim
 
 
 class YetersizStok(Exception):
@@ -23,6 +24,30 @@ class YetersizStok(Exception):
 
 class SatisHatasi(Exception):
     """Satış kaydedilemediğinde (bilinmeyen / zaten satılmış seri no vb.) fırlatılır."""
+
+
+# --- Stok özeti --------------------------------------------------------------
+
+def parca_stoklari(queryset=None):
+    """Parçalara stok alanlarını ekler.
+
+    toplam_stok: tüm lotlardaki kalan; kullanilabilir_stok: geri çağrılmamış
+    lotlardaki kalan; lot_sayisi: kalanı olan lot sayısı; min_altinda: kullanılabilir
+    stok min_stok'un altında mı.
+    """
+    qs = Parca.objects.all() if queryset is None else queryset
+    qs = qs.annotate(
+        toplam_stok=Coalesce(Sum('lotlar__kalan_adet'), 0),
+        kullanilabilir_stok=Coalesce(
+            Sum('lotlar__kalan_adet', filter=Q(lotlar__geri_cagrildi=False)), 0
+        ),
+        lot_sayisi=Count('lotlar', filter=Q(lotlar__kalan_adet__gt=0), distinct=True),
+    )
+    return qs.annotate(
+        min_altinda=ExpressionWrapper(
+            Q(kullanilabilir_stok__lt=F('min_stok')), output_field=BooleanField()
+        )
+    )
 
 
 # --- Üretim önizleme ---------------------------------------------------------

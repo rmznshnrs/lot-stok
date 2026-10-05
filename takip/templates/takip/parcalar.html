@@ -1,0 +1,84 @@
+{% extends 'takip/base.html' %}
+{% block baslik %}Parçalar{% endblock %}
+{% block icerik %}
+<section class="kart kart--form">
+  <h2>Yeni parça tanımla</h2>
+  <form method="post" class="form-dikey" novalidate>
+    {% csrf_token %}
+    {% for e in form.non_field_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+    <div class="alan">
+      <label for="{{ form.kod.id_for_label }}">{{ form.kod.label }}</label>
+      {{ form.kod }}
+      {% for e in form.kod.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+    <div class="alan">
+      <label for="{{ form.ad.id_for_label }}">{{ form.ad.label }}</label>
+      {{ form.ad }}
+      {% for e in form.ad.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+    </div>
+    <div class="izgara-2">
+      <div class="alan">
+        <label for="{{ form.birim.id_for_label }}">{{ form.birim.label }}</label>
+        {{ form.birim }}
+        {% for e in form.birim.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+      <div class="alan">
+        <label for="{{ form.min_stok.id_for_label }}">{{ form.min_stok.label }}</label>
+        {{ form.min_stok }}
+        {% for e in form.min_stok.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+    </div>
+    <div class="not">Lot numarası burada girilmez; parça her geldiğinde Stok ekranından yeni lot olarak eklenir.</div>
+    <button type="submit" class="btn btn--tam">Parçayı kaydet</button>
+  </form>
+</section>
+
+<section class="kart kart--genis">
+  <div class="bas-satir">
+    <h2>Tanımlı parçalar</h2>
+    <form method="get" role="search">
+      <input type="search" name="q" value="{{ q }}" class="girdi girdi--ara" aria-label="Parça ara" placeholder="Kod veya ad ara…">
+    </form>
+  </div>
+  <div class="tablo-kap">
+  <table class="tablo">
+    <thead>
+      <tr>
+        <th>Kod</th>
+        <th>Ad</th>
+        <th>Birim</th>
+        <th class="sag">Toplam stok</th>
+        <th class="sag" title="Kalanı olan lot sayısı">Lot sayısı</th>
+        <th>Kullanıldığı ürünler</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in parcalar %}
+      {% with urunler=p.urunler.all %}
+      <tr{% if p.min_altinda %} class="uyari-satir"{% endif %}>
+        <td class="mono">{{ p.kod }}</td>
+        <td>{{ p.ad }}{% if p.pk == yeni_pk %} <span class="rozet rozet--kucuk rozet--mavi">yeni</span>{% endif %}</td>
+        <td>{{ p.birim }}</td>
+        {% if p.min_altinda %}
+        <td class="sag uyari-metin" title="Kullanılabilir {{ p.kullanilabilir_stok }} · toplam {{ p.toplam_stok }} · minimum {{ p.min_stok }}"><a class="uyari-metin" href="{% url 'takip:stok' %}?parca={{ p.kod|urlencode }}">{{ p.kullanilabilir_stok }}</a> · min altında</td>
+        {% elif p.toplam_stok %}
+        <td class="sag" title="Kullanılabilir {{ p.kullanilabilir_stok }} · toplam {{ p.toplam_stok }} · minimum {{ p.min_stok }}"><a href="{% url 'takip:stok' %}?parca={{ p.kod|urlencode }}">{{ p.kullanilabilir_stok }}</a></td>
+        {% else %}
+        <td class="sag soluk">0</td>
+        {% endif %}
+        <td class="sag{% if not p.lot_sayisi %} soluk{% endif %}">{{ p.lot_sayisi }}</td>
+        {% if urunler %}
+        <td>{% for u in urunler %}<a href="{% url 'takip:urun' u.pk %}">{{ u.ad }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+        {% else %}
+        <td class="soluk">Henüz hiçbir ürün ağacında yok</td>
+        {% endif %}
+      </tr>
+      {% endwith %}
+      {% empty %}
+      <tr class="bos"><td colspan="6">{% if q %}“{{ q }}” için parça bulunamadı.{% else %}Henüz parça tanımlanmadı.{% endif %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

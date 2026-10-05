@@ -1,0 +1,36 @@
+{% load static %}<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block baslik %}Lot Takip{% endblock %} – Lot Takip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="{% static 'takip/style.css' %}">
+</head>
+<body>
+<header class="ust">
+  <a class="logo" href="{% url 'takip:ana_sayfa' %}">LOT TAKİP</a>
+  <nav class="menu" aria-label="Ana menü">
+    <a href="{% url 'takip:ana_sayfa' %}"{% if aktif == 'ana_sayfa' %} class="aktif" aria-current="page"{% endif %}>Ana Sayfa</a>
+    <a href="{% url 'takip:izlenebilirlik' %}"{% if aktif == 'izlenebilirlik' %} class="aktif" aria-current="page"{% endif %}>İzlenebilirlik</a>
+    <a href="{% url 'takip:uretim' %}"{% if aktif == 'uretim' %} class="aktif" aria-current="page"{% endif %}>Üretim</a>
+    <a href="{% url 'takip:stok' %}"{% if aktif == 'stok' %} class="aktif" aria-current="page"{% endif %}>Stok</a>
+    <a href="{% url 'takip:satis' %}"{% if aktif == 'satis' %} class="aktif" aria-current="page"{% endif %}>Satış</a>
+    <a href="{% url 'takip:urunler' %}"{% if aktif == 'urunler' %} class="aktif" aria-current="page"{% endif %}>Ürünler</a>
+    <a href="{% url 'takip:parcalar' %}"{% if aktif == 'parcalar' %} class="aktif" aria-current="page"{% endif %}>Parçalar</a>
+  </nav>
+  <div class="ust-sag"><a href="{% url 'admin:index' %}">Yönetim</a></div>
+</header>
+{% if messages %}
+<div class="mesajlar" role="status">
+  {% for m in messages %}<div class="mesaj mesaj--{{ m.tags }}">{{ m }}</div>{% endfor %}
+</div>
+{% endif %}
+<main class="icerik{% block icerik_sinifi %}{% endblock %}">
+{% block icerik %}{% endblock %}
+</main>
+{% block js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,109 @@
+{% extends 'takip/base.html' %}
+{% block baslik %}{% if urun %}{{ urun.ad }}{% else %}Yeni ürün{% endif %} – Ürünler{% endblock %}
+{% block icerik %}
+<section class="kart kart--liste">
+  <div class="bas-satir bas-satir--liste">
+    <h2>Ürünler</h2>
+    <a href="{% url 'takip:urun_yeni' %}" class="btn btn--kucuk">+ Yeni ürün</a>
+  </div>
+  <form method="get" role="search">
+    <input type="search" name="q" value="{{ q }}" class="girdi girdi--liste-ara" aria-label="Ürün ara" placeholder="Ürün ara…">
+  </form>
+  {% for u in urunler %}
+  <a href="{% url 'takip:urun' u.pk %}{% if q %}?q={{ q|urlencode }}{% endif %}" class="liste-oge{% if urun and u.pk == urun.pk %} liste-oge--secili{% endif %}"{% if urun and u.pk == urun.pk %} aria-current="page"{% endif %}>
+    <span class="liste-oge-ad">{{ u.ad }}</span>
+    <span class="liste-oge-alt">Kod: <span class="mono">{{ u.kod }}</span>{% if urun and u.pk == urun.pk %} · seri öneki <span class="mono">{{ u.seri_oneki }}</span>{% endif %}</span>
+  </a>
+  {% empty %}
+  <p class="not">{% if q %}“{{ q }}” için ürün bulunamadı.{% else %}Henüz ürün yok.{% endif %}</p>
+  {% endfor %}
+</section>
+
+<section class="kart kart--genis kart--bosluklu">
+  <form method="post" class="form-dikey" novalidate>
+    {% csrf_token %}
+    {% if not urun %}<h2>Yeni ürün</h2>{% endif %}
+    {% for e in form.non_field_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+    <div class="izgara-urun">
+      {% for alan in form %}
+      <div class="alan">
+        <label for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+        {{ alan }}
+        {% if alan.help_text %}<span class="yardim">{{ alan.help_text }}</span>{% endif %}
+        {% for e in alan.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="baslik-grup">
+      <h3>Ürün ağacı</h3>
+      <span class="not">1 adet ürün için hangi parçadan kaç adet kullanılır</span>
+    </div>
+
+    {{ formset.management_form }}
+    {% for e in formset.non_form_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+    <div class="tablo-kap">
+    <table class="tablo tablo--sik">
+      <thead>
+        <tr>
+          <th>Parça</th>
+          <th>Parça kodu</th>
+          <th class="sutun-adet">Adet / ürün</th>
+          <th class="sag">Stokta</th>
+          <th class="sutun-ikon"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f, p in satirlar %}
+        <tr class="agac-satiri">
+          <td>{{ f.id }}{{ f.parca }}{{ p.ad }}</td>
+          <td class="mono">{{ p.kod }}</td>
+          <td>
+            {{ f.adet }}
+            {% for e in f.adet.errors %}<div class="hata">{{ e }}</div>{% endfor %}
+            {% for e in f.non_field_errors %}<div class="hata">{{ e }}</div>{% endfor %}
+          </td>
+          {% if p.min_altinda %}
+          <td class="sag uyari-metin" title="Minimum {{ p.min_stok }}">{{ p.kullanilabilir_stok }}</td>
+          {% else %}
+          <td class="sag">{{ p.kullanilabilir_stok }}</td>
+          {% endif %}
+          <td>
+            <label class="btn-kaldir" title="Kaldır (Kaydet ile uygulanır)">
+              <input type="checkbox" name="{{ f.DELETE.html_name }}" id="{{ f.DELETE.auto_id }}" class="gorunmez"{% if f.DELETE.value %} checked{% endif %} aria-label="{{ p.kod }} satırını kaldır">×
+            </label>
+          </td>
+        </tr>
+        {% empty %}
+        <tr class="bos"><td colspan="5">Ürün ağacı boş. Aşağıdan parça ekleyin.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <div class="satir-ekle">
+      <div class="alan girdi--esnek">
+        <input type="text" name="yeni_parca" value="{{ yeni_satir.yeni_parca.value|default_if_none:'' }}" list="parca-listesi" class="girdi girdi--kesikli" aria-label="Parça ekle" placeholder="Parça adı veya kodu ile ekle…" autocomplete="off">
+        {% for e in yeni_satir.yeni_parca.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+      <div class="alan girdi--kisa">
+        <input type="number" name="yeni_adet" min="1" value="{{ yeni_satir.yeni_adet.value|default_if_none:'' }}" class="girdi girdi--kesikli" aria-label="Adet" placeholder="Adet">
+        {% for e in yeni_satir.yeni_adet.errors %}<span class="hata">{{ e }}</span>{% endfor %}
+      </div>
+      <button type="submit" name="islem" value="ekle" class="btn btn--ikincil">Ekle</button>
+    </div>
+    <datalist id="parca-listesi">
+      {% for p in parcalar %}<option value="{{ p.kod }}">{{ p.ad }}</option>{% endfor %}
+    </datalist>
+
+    <div class="kart-alt">
+      {% if urun %}
+      <a href="{% url 'takip:uretim' %}?urun={{ urun.pk }}" class="not--buyuk">Bu üründen üret →</a>
+      {% else %}
+      <span></span>
+      {% endif %}
+      <button type="submit" class="btn">Kaydet</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
